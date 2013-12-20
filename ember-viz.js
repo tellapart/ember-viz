@@ -4,31 +4,18 @@
 
 (function() {
   Ember.EmberViz.Helpers = Ember.Namespace.create({
-    getRanges: function(seriesArray) {
+    getDomain: function(seriesArray, accessFunction) {
 
-      var minX = d3.min(seriesArray,
+      var minValue = d3.min(seriesArray,
                         function(d) {
-                          return d3.min(d.values,
-                                        function(v) { return v.x; }); }),
-          maxX = d3.max(seriesArray,
+                          return d3.min(d.values, accessFunction); }),
+          maxValue = d3.max(seriesArray,
                         function(d) {
-                          return d3.max(d.values,
-                                        function(v) { return v.x; }); }),
-          minY = d3.min(seriesArray,
-                        function(d) {
-                          return d3.min(d.values,
-                                        function(v) { return v.y; }); }),
-          maxY = d3.max(seriesArray,
-                        function(d) {
-                          return d3.max(d.values,
-                                        function(v) { return v.y; }); });
+                          return d3.max(d.values, accessFunction); });
 
-      return {
-        x: [minX, maxX],
-        y: [minY, maxY]
-      };
+      return [minValue, maxValue];
     },
-    overrideRange: function(range, newRange) {
+    overrideDomain: function(range, newRange) {
 
       if (newRange !== undefined && newRange !== null) {
         if (!isNaN(newRange[0])) {
@@ -38,6 +25,8 @@
           range[1] = newRange[1];
         }
       }
+
+      return range;
     },
     makeXAxisElement: function(scale, format) {
       return d3.svg.axis()
@@ -89,8 +78,20 @@
 
     showTooltip: true,
     timeFormatter: d3.time.format.utc,
-    xScale: d3.time.scale.utc(),
-    yScale: d3.scale.linear(),
+
+    xScale: function() {
+      return d3.time.scale.utc()
+        .domain(this.get('xDomain'))
+        .range([0, this.get('_mainChartWidth')]);
+    }.property('_mainChartWidth', 'xDomain'),
+
+    yScale: function() {
+      return d3.scale.linear()
+        .domain(this.get('yDomain'))
+        .range([this.get('_mainChartHeight'), 0]);
+    }.property('_mainChartHeight', 'yDomain'),
+
+
     valueFormatFn: d3.format(''),
     valueTickFormatFn: d3.format('.2s'),
 
@@ -138,8 +139,8 @@
 
     timeFormatFn: function() {
       var _data = this.get('_data'),
-          ranges = this._getDataRanges(_data),
-          totalTimeRange = ranges.x[1] - ranges.x[0],
+          xDomain = this.get('xDomain'),
+          totalTimeRange = xDomain[1] - xDomain[0],
           timeFormatter = this.get('timeFormatter'),
           avgGranularity = this._getAverageGranularity(_data);
 
@@ -158,8 +159,8 @@
 
     timeTickFormatFn: function() {
       var _data = this.get('_data'),
-          ranges = this._getDataRanges(_data),
-          totalTimeRange = ranges.x[1] - ranges.x[0],
+          xDomain = this.get('xDomain'),
+          totalTimeRange = xDomain[1] - xDomain[0],
           timeFormatter = this.get('timeFormatter'),
           avgGranularity = this._getAverageGranularity(_data);
 
@@ -185,6 +186,24 @@
       return timeFormatter('%H:%M');
 
     }.property('_data'),
+
+    xDomain: function() {
+      var data = this.get('_data');
+      var domain = Ember.EmberViz.Helpers.getDomain(data,
+                                                   function(d) { return d.x; });
+
+      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
+
+    }.property('_data', 'forceX'),
+
+    yDomain: function() {
+      var data = this.get('_data');
+      var domain = Ember.EmberViz.Helpers.getDomain(data,
+                                                   function(d) { return d.y; });
+
+      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceY'));
+
+    }.property('_data', 'forceX'),
 
     /***************************************************************************
      * Private variables and functions that should not be overwritten.
@@ -215,21 +234,6 @@
                timeFormatFn(new Date(elem.x)) + '</p>';
       }
     }.property('valueFormatFn', 'timeFormatFn'),
-
-    // Compute the data x and y ranges based on the data and on any forcing
-    // values provided by the user.
-    _getDataRanges: function(data) {
-      var forceY = this.get('forceY'),
-          forceX = this.get('forceX'),
-          ranges = Ember.EmberViz.Helpers.getRanges(data);
-
-      // If any forceX or forceY were provided, override the ranges derived from
-      // from the data.
-      Ember.EmberViz.Helpers.overrideRange(ranges.y, forceY);
-      Ember.EmberViz.Helpers.overrideRange(ranges.x, forceX);
-
-      return ranges;
-    },
 
     _getAverageGranularity: function(data) {
       var count = 0;
@@ -362,7 +366,6 @@
 
           lineType = this.get('lineType'),
           margins = this.get('margins'),
-          ranges = this._getDataRanges(_data),
           self = this,
           showTooltip = this.get('showTooltip'),
           tooltipContentFn = this.get('tooltipContentFn'),
@@ -380,13 +383,6 @@
         // TODO: Show some indication that there is no data.
         return;
       }
-
-      // Apply domain and range to the scales.
-      xScale.range([0, _mainChartWidth])
-            .domain(ranges.x);
-
-      yScale.range([_mainChartHeight, 0])
-            .domain(ranges.y);
 
       // Add and size the main svg element for the chart and create the main 'g'
       // container for all of the chart components.
@@ -510,117 +506,250 @@
 }) ();
 
 $(function() {
-  Ember.EmberViz.LineWithFocusChartComponent = Ember.EmberViz.LineChartComponent.extend({
-    classNames: ['line-with-focus-chart'],
-    x2Scale: d3.time.scale.utc(),
-    y2Scale: d3.scale.linear(),
-    focusHeightRatio: 0.25,
-    focusHeight: function() {
-      var focusHeightRatio = this.get('focusHeightRatio'),
+  Ember.EmberViz.FocusWithContextChartComponent = Ember.EmberViz.LineChartComponent.extend({
+    classNames: ['focus-with-context-chart'],
+    // brushExtent: null,
+    brushExtent: [new Date(1387495796000), new Date(1388446196000)],
+    contextHeightRatio: 0.25,
+
+    x2Scale: function() {
+      return d3.time.scale.utc()
+        .domain(this.get('x2Domain'))
+        .range([0, this.get('_mainChartWidth')]);
+    }.property('_mainChartWidth', 'x2Domain'),
+
+    y2Scale: function() {
+      return d3.scale.linear()
+        .domain(this.get('yDomain'))
+        .range([this.get('_contextChartHeight'), 0]);
+    }.property('_contextChartHeight', 'yDomain'),
+
+    xDomain: function() {
+      var data = this.get('_data'),
+          domain = Ember.EmberViz.Helpers.getDomain(data,
+                                                   function(d) { return d.x; }),
+          brushExtent = this.get('brushExtent');
+
+      if (brushExtent) {
+        domain = brushExtent;
+      }
+
+      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
+
+    }.property('_data', 'forceX', 'brushExtent'),
+
+    x2Domain: function() {
+      var data = this.get('_data'),
+          domain = Ember.EmberViz.Helpers.getDomain(data,
+                                                   function(d) { return d.x; });
+
+      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
+
+    }.property('_data', 'forceX'),
+
+    yDomain: function() {
+      var domain,
+          data = this.get('_data');
+      var brushExtent = this.get('brushExtent');
+
+      if (brushExtent) {
+        var minValue = null;
+        var maxValue = null;
+
+        data.forEach(function(series) {
+          series.values.forEach(function(point) {
+
+            if (point.x >= brushExtent[0] && point.x <= brushExtent[1]) {
+              if (minValue === null || point.y < minValue) minValue = point.y;
+              if (maxValue === null || point.y > maxValue) maxValue = point.y;
+            }
+          });
+        });
+        domain = [minValue, maxValue];
+        console.log('Domain:', domain);
+      } else {
+        domain = Ember.EmberViz.Helpers.getDomain(data,
+                                                   function(d) { return d.y; });
+      }
+
+      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceY'));
+
+    }.property('_data', 'forceX', 'brushExtent'),
+
+
+    contextHeight: function() {
+      var contextHeightRatio = this.get('contextHeightRatio'),
           height = this.get('height');
-      return focusHeightRatio * height;
-    }.property('height', 'focusHeightRatio'),
+      return contextHeightRatio * height;
+    }.property('height', 'contextHeightRatio'),
 
-    _focusChartHeight: function() {
-      var focusHeight = this.get('focusHeight'),
+    _contextChartHeight: function() {
+      var contextHeight = this.get('contextHeight'),
           margins = this.get('margins');
-      return focusHeight - margins.bottom - margins.top;
-    }.property('focusHeight'),
+      return contextHeight - margins.bottom - margins.top;
+    }.property('contextHeight'),
 
-    // Override this height to accommodate space for the focus chart.
+    // Override this height to create space for the context chart.
     _mainChartHeight: function() {
       var height = this.get('height'),
-          focusHeight = this.get('focusHeight'),
+          contextHeight = this.get('contextHeight'),
           margins = this.get('margins');
 
-      return height - focusHeight - margins.top - margins.bottom;
-    }.property('height', 'focusHeight', 'margins'),
+      return height - contextHeight - margins.top - margins.bottom;
+    }.property('height', 'contextHeight', 'margins'),
 
-    _renderMainChart: function(data) {
-      console.time('Rendering main chart');
-      var xAxis,
-          yAxis,
-          self = this,
-          ranges = this._getDataRanges(data),
-          elementId = this.get('elementId'),
-          g = d3.select('#' + elementId + ' .ember-viz-chart'),
+    _render: function() {
+
+      var g,
+          contextG,
+          brushBG,
+          brushBGenter,
+          gBrush,
+          tooltipCircle,
+          $tooltipDiv,
           _colorFn = this.get('_colorFn'),
+          _data = this.get('_data'),
           _mainChartHeight = this.get('_mainChartHeight'),
+          _contextChartHeight = this.get('_contextChartHeight'),
           _mainChartWidth = this.get('_mainChartWidth'),
-          margins = this.get('margins'),
-          xScale = this.get('xScale'),
-          yScale = this.get('yScale'),
+
+          elementId = this.get('elementId'),
+          $container = $('#' + elementId),
+
+          height = this.get('height'),
+          width = this.get('width'),
+
+          brushExtent = this.get('brushExtent'),
           lineType = this.get('lineType'),
+          margins = this.get('margins'),
           showTooltip = this.get('showTooltip'),
-          $tooltipDiv = $('#' + elementId + ' .chart-tooltip'),
           tooltipContentFn = this.get('tooltipContentFn'),
+          self = this,
+          valueFormatFn = this.get('valueFormatFn'),
+          xScale = this.get('xScale'),
+          x2Scale = this.get('x2Scale'),
           xTickFormat = this.get('timeTickFormatFn'),
-          yTickFormat = this.get('valueTickFormatFn');
+          yTickFormat = this.get('valueTickFormatFn'),
+          yScale = this.get('yScale'),
+          y2Scale = this.get('y2Scale');
 
-      console.log('Ranges:', ranges);
-      // Apply domain and range to the scales.
-      xScale.range([0, _mainChartWidth])
-            .domain(ranges.x);
+      // Clear the div.
+      $container.empty();
 
-      yScale.range([_mainChartHeight, 0])
-            .domain(ranges.y);
+      if (Ember.isEmpty(_data)) {
 
-      // Add the axes.
+        // TODO: Show some indication that there is no data.
+        return;
+      }
+
       xAxis = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat);
-      g.select('.main-x-axis')
-        .attr('transform', 'translate(0,' + _mainChartHeight + ')')
-        .call(xAxis);
-
       yAxis = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat);
-      g.select('.main-y-axis')
-        .call(yAxis);
+      x2Axis = Ember.EmberViz.Helpers.makeXAxisElement(x2Scale, xTickFormat);
 
-      // Add the grid lines.
-      g.select('.main-x-grid')
-       .attr('transform', 'translate(0,' + _mainChartHeight + ')')
-       .call(Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat)
-                  .tickSize(-1 * _mainChartHeight, 0, 0)
-                  .tickFormat('')
-       );
-      g.select('.main-y-grid')
-       .call(Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat)
-                  .tickSize(-1 * _mainChartWidth, 0, 0)
-                  .tickFormat('')
-       );
+      xGrid = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat)
+        .tickSize(-1 * _mainChartHeight, 0, 0)
+        .tickFormat('');
+      yGrid = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat)
+        .tickSize(-1 * _mainChartWidth, 0, 0)
+        .tickFormat('');
 
-      // Add the chart lines.
       line = lineType()
           .x(function(d) { return xScale(d.x); })
           .y(function(d) { return yScale(d.y); });
+      line2 = lineType()
+          .x(function(d) { return x2Scale(d.x); })
+          .y(function(d) { return y2Scale(d.y); });
 
-      // g.select('.chart-lines')
-      //  .selectAll('.chart-line')
-      //  .datum(data)
-      //   .append('path')
-      //   .attr('class', 'chart-line')
-      //   .attr('d', function(d) { return line(d.values); })
-      //   .style('stroke', _colorFn);
+      var brush = d3.svg.brush()
+        .x(x2Scale)
+        .on('brush', onBrush);
 
-      g.select('.chart-lines')
+      if (brushExtent) {
+        brush.extent(brushExtent);
+      }
+
+      // Add and size the main svg element for the chart and create the main 'g'
+      // container for all of the chart components.
+      g = d3.select('#' + elementId).append('svg')
+        .attr('width', width)
+        .attr('height', height)
+        .append('g')
+        .attr('class', 'ember-viz-chart')
+        .attr('transform',
+              'translate(' + margins.left + ',' + margins.top + ')');
+
+      // Create and add the tooltip div.
+      $tooltipDiv = $('<div>').addClass('chart-tooltip');
+      $container.append($tooltipDiv);
+
+      // Add the axes.
+      g.append('g')
+       .attr('class', 'axis main-x-axis')
+       .attr('transform', 'translate(0,' + _mainChartHeight + ')')
+       .call(xAxis);
+
+      g.append('g')
+       .attr('class', 'axis main-y-axis')
+       .call(yAxis);
+
+      g.append('g')
+       .attr('class', 'axis context-x-axis')
+       .attr('transform',
+             'translate(0,' + (_mainChartHeight + _contextChartHeight +
+                               margins.bottom) + ')')
+       .call(x2Axis);
+
+      // Add the grid lines.
+      g.append('g')
+       .attr('class', 'grid main-x-grid')
+       .attr('transform', 'translate(0,' + _mainChartHeight + ')')
+       .call(xGrid);
+      g.select('.main-y-grid')
+       .call(yGrid);
+
+      // Add the clip path to hide the lines outside of the main window.
+      var clipPathId = elementId + '-clip-path';
+      g.append('clipPath')
+       .attr('id', clipPathId)
+       .append('rect')
+       .attr('width', _mainChartWidth)
+       .attr('height', _mainChartHeight);
+
+      // Add the chart lines.
+      g.append('g')
+       .attr('class', 'chart-lines')
        .selectAll('.chart-line')
-       .data(data)
+       .data(_data)
        .enter()
         .append('path')
         .attr('class', 'chart-line')
+        .attr('clip-path', 'url(#' + clipPathId + ')')
         .attr('d', function(d) { return line(d.values); })
         .style('stroke', _colorFn);
 
-      window.awesome = g;
+      g.append('g')
+       .attr('class', 'context-chart-lines')
+       .selectAll('.context-chart-line')
+       .data(_data)
+      .enter()
+       .append('path')
+       .attr('class', 'context-chart-line')
+       .attr('transform',
+             'translate(0,' + (_mainChartHeight + margins.bottom) + ')')
+       .attr('d', function(d) { return line2(d.values); })
+       .style('stroke', _colorFn);
 
       if (showTooltip) {
         // Add a circle for use with the tooltip.
-        tooltipCircle = g.select('.tooltip-circle')
-                          .attr('cx', 0)
-                          .attr('cy', 0)
-                          .attr('r', 5);
+        tooltipCircle = g.append('circle')
+                         .attr('class', 'tooltip-circle')
+                         .attr('cx', 0)
+                         .attr('cy', 0)
+                         .attr('r', 5);
 
         // Add an invisible rectangle to detect mouse movements.
-        g.select('.hover-rect')
+        g.append('rect')
+         .attr('class', 'hover-rect')
          .attr('width', _mainChartWidth)
          .attr('height', _mainChartHeight)
          .style('opacity', 0)
@@ -633,7 +762,7 @@ $(function() {
                position = d3.mouse(this),
                xPosition = position[0],
                yPosition = position[1],
-               closestPointInfo = self._findClosestPoint(data, xPosition, yPosition);
+               closestPointInfo = self._findClosestPoint(_data, xPosition, yPosition);
 
            // If a closest point was found inside the appropriate radius,
            // display information about that point.
@@ -666,172 +795,13 @@ $(function() {
            tooltipCircle.style('display', 'none');
          });
 
-
-        // Precompute the pixel locations of all the points, but only after the
-        // rest  of the chart is rendered.
-        this._precomputePoints(data, xScale, yScale);
       }
-
-      console.timeEnd('Rendering main chart');
-    },
-
-    _renderFocusChart: function(data) {
-      var x2Scale = this.get('x2Scale'),
-          y2Scale = this.get('y2Scale'),
-          ranges = this._getDataRanges(data),
-          lineType = this.get('lineType'),
-          _focusChartHeight = this.get('_focusChartHeight'),
-          _mainChartWidth = this.get('_mainChartWidth'),
-          elementId = this.get('elementId'),
-          g = d3.select('#' + elementId + ' .ember-viz-chart'),
-          _colorFn = this.get('_colorFn'),
-          _mainChartHeight = this.get('_mainChartHeight'),
-          margins = this.get('margins'),
-          xTickFormat = this.get('timeTickFormatFn'),
-          yTickFormat = this.get('valueTickFormatFn');
-
-      // Apply the domain and range to the scales.
-      x2Scale.range([0, _mainChartWidth])
-            .domain(ranges.x);
-      y2Scale.range([_focusChartHeight, 0])
-            .domain(ranges.y);
-      // Add the x axes.
-      x2Axis = Ember.EmberViz.Helpers.makeXAxisElement(x2Scale, xTickFormat);
-      g.append('g')
-        .attr('class', 'x2 axis')
-        .attr('transform',
-              'translate(0,' + (_mainChartHeight + _focusChartHeight +
-                                margins.bottom) + ')')
-        .call(x2Axis);
-
-      // Add the y axes.
-      y2Axis = Ember.EmberViz.Helpers.makeYAxisElement(y2Scale, yTickFormat)
-        .ticks(3);
-      g.append('g')
-        .attr('class', 'y axis')
-        .attr('transform',
-              'translate(0,' + (_mainChartHeight + margins.bottom) + ')')
-        .call(y2Axis);
-
-      // Add the grid lines.
-      $('#' + elementId + ' .focus-x-grid').remove();
-      $('#' + elementId + ' .focus-y-grid').remove();
-      // g.select('.focus-x-grid')
-      g.append('g')
-       .attr('class', 'focus-x-grid')
-       .attr('class', 'grid')
-       .attr('transform',
-             'translate(0,' + (_focusChartHeight + _mainChartHeight +
-                               margins.bottom) + ')')
-       .call(Ember.EmberViz.Helpers.makeXAxisElement(x2Scale, xTickFormat)
-                  .tickSize(-1 * _focusChartHeight, 0, 0)
-                  .tickFormat('')
-       );
-      // g.select('.focus-y-grid')
-      g.append('g')
-       .attr('class', 'focus-y-grid')
-       .attr('class', 'grid')
-       .attr('transform', 'translate(0,' + (_mainChartHeight +
-                                            margins.bottom) + ')')
-       .call(Ember.EmberViz.Helpers.makeYAxisElement(y2Scale, yTickFormat)
-               .tickSize(-1 * _mainChartWidth, 0, 0)
-               .ticks(3)
-               .tickFormat('')
-       );
-
-      // Add the chart lines.
-
-      line2 = lineType()
-          .x(function(d) { return x2Scale(d.x); })
-          .y(function(d) { return y2Scale(d.y); });
-
-
-      g.select('.focus-chart-lines')
-       .selectAll('.focus-chart-line')
-       .data(data)
-      .enter()
-       .append('path')
-       .attr('class', 'focus-chart-line')
-       .attr('transform',
-             'translate(0,' + (_mainChartHeight + margins.bottom) + ')')
-       .attr('d', function(d) { return line2(d.values); })
-       .style('stroke', _colorFn);
-    },
-
-    _render: function() {
-
-      var g,
-          tooltipCircle,
-          $tooltipDiv,
-          _colorFn = this.get('_colorFn'),
-          _data = this.get('_data'),
-          _mainChartHeight = this.get('_mainChartHeight'),
-          _focusChartHeight = this.get('_focusChartHeight'),
-          _mainChartWidth = this.get('_mainChartWidth'),
-
-          elementId = this.get('elementId'),
-          $container = $('#' + elementId),
-
-          height = this.get('height'),
-          width = this.get('width'),
-
-          margins = this.get('margins'),
-          self = this,
-          valueFormatFn = this.get('valueFormatFn'),
-          xScale = this.get('xScale'),
-          x2Scale = this.get('x2Scale'),
-          xTickFormat = this.get('timeTickFormatFn'),
-          yTickFormat = this.get('valueTickFormatFn'),
-          yScale = this.get('yScale'),
-          y2Scale = this.get('y2Scale');
-
-      // Clear the div.
-      $container.empty();
-
-      if (Ember.isEmpty(_data)) {
-
-        // TODO: Show some indication that there is no data.
-        return;
-      }
-
-
-      // Add and size the main svg element for the chart and create the main 'g'
-      // container for all of the chart components.
-      g = d3.select('#' + elementId).append('svg')
-        .attr('width', width)
-        .attr('height', height)
-        .append('g')
-        .attr('class', 'ember-viz-chart')
-        .attr('transform',
-              'translate(' + margins.left + ',' + margins.top + ')');
-
-      // Create and add the tooltip div.
-      $tooltipDiv = $('<div>').addClass('chart-tooltip');
-      $container.append($tooltipDiv);
-
-      g.append('g').attr('class', 'grid main-x-grid');
-      g.append('g').attr('class', 'grid main-y-grid');
-      g.append('g').attr('class', 'grid focus-x-grid');
-      g.append('g').attr('class', 'grid focus-x-grid');
-
-      g.append('g').attr('class', 'axis main-x-axis');
-      g.append('g').attr('class', 'axis main-y-axis');
-      g.append('g').attr('class', 'chart-lines');
-      g.append('g').attr('class', 'focus-chart-lines');
-      g.append('circle').attr('class', 'tooltip-circle');
-
-      g.append('rect').attr('class', 'hover-rect');
-
-      this._renderMainChart(_data);
-      this._renderFocusChart(_data);
-
-
 
       // Taken from crossfilter (http://square.github.com/crossfilter/)
       function resizePath(d) {
         var e = +(d == 'e'),
             x = e ? 1 : -1,
-            y = _focusChartHeight / 3;
+            y = _contextChartHeight / 3;
         return 'M' + (.5 * x) + ',' + y
             + 'A6,6 0 0 ' + e + ' ' + (6.5 * x) + ',' + (y + 6)
             + 'V' + (2 * y - 6)
@@ -843,43 +813,35 @@ $(function() {
             + 'V' + (2 * y - 8);
       }
 
-      var focusG = g.append('g')
+      contextG = g.append('g')
         .attr('transform', 'translate(0,' + (_mainChartHeight + margins.bottom) + ')');
-      focusG.append('g')
-         .attr('class', 'focus-brush-background');
-      focusG.append('g')
-         .attr('class', 'focus-brush');
+      contextG.append('g')
+        .attr('class', 'context-brush-background');
+      contextG.append('g')
+        .attr('class', 'context-brush');
 
-      var brush = d3.svg.brush()
-        .x(x2Scale)
-        .on('brush', onBrush);
+      brushBG = contextG.select('.context-brush-background').selectAll('g')
+        .data([brush.extent()])
 
-      window.brush = brush;
-
-      var brushExtent = null;
-      var brushBG = focusG.select('.focus-brush-background').selectAll('g')
-          .data([brushExtent || brush.extent()])
-
-      var brushBGenter = brushBG.enter()
-          .append('g');
+      brushBGenter = brushBG.enter()
+        .append('g');
 
       brushBGenter.append('rect')
-          .attr('class', 'left')
-          .attr('x', 0)
-          .attr('y', 0)
-          .attr('height', _focusChartHeight);
+        .attr('class', 'left')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('height', _contextChartHeight);
 
       brushBGenter.append('rect')
-          .attr('class', 'right')
-          .attr('x', 0)
-          .attr('y', 0)
-          .attr('height', _focusChartHeight);
+        .attr('class', 'right')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('height', _contextChartHeight);
 
-      var gBrush = focusG.select('.focus-brush')
-          .call(brush);
+      gBrush = contextG.select('.context-brush')
+        .call(brush);
       gBrush.selectAll('rect')
-          //.attr('y', -5)
-          .attr('height', _focusChartHeight);
+        .attr('height', _contextChartHeight);
       gBrush.selectAll('.resize').append('path').attr('d', resizePath);
 
       function updateBrushBG() {
@@ -898,33 +860,34 @@ $(function() {
             });
       }
       function onBrush() {
-        console.log('A brush happened!', arguments);
         brushExtent = brush.empty() ? null : brush.extent();
-        console.log('Brush extent:', brushExtent);
+        self.set('brushExtent', brushExtent);
 
-        // brushExtent = [1385337600000, 1385510400000];
+        var xDomain = self.get('xDomain');
+        var yDomain = self.get('yDomain');
 
-        var filteredData = _data.map(function(series) {
-          var filtered_vals = series.values.filter(function(dataPoint) {
-              if (brushExtent == null) return true;
-              else {
-                return dataPoint.x >= brushExtent[0] && dataPoint.x <= brushExtent[1];
-              }
-            });
-            console.log('Filtered length:', filtered_vals.length);
-          return {
-            key: series.key,
-            values: filtered_vals
-          };
-        });
-        self._renderMainChart(filteredData);
+        xScale.domain(xDomain);
+        yScale.domain(yDomain);
+        g.select('.chart-lines')
+         .selectAll('.chart-line')
+         .attr('d', function(d) { return line(d.values); });
+        g.select('.axis.main-x-axis')
+         .call(xAxis);
+        g.select('.axis.main-y-axis')
+         .call(yAxis);
 
         updateBrushBG();
+
+        if (showTooltip) {
+          self._precomputePoints(_data, xScale, yScale);
+        }
       }
+
+      onBrush();
 
       // TODO: Allow the developer to bind event handlers. (onclick, etc.)
     }.observes('_data')
   });
 
-  Ember.Handlebars.helper('line-with-focus-chart', Ember.EmberViz.LineWithFocusChartComponent);
+  Ember.Handlebars.helper('focus-with-context-chart', Ember.EmberViz.FocusWithContextChartComponent);
 });

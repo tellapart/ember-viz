@@ -2,7 +2,7 @@
 .axis line { fill: none; stroke: #000; shape-rendering: crispEdges; }
 
 .line-chart { position: relative; }
-.chart-line, .focus-chart-line { fill: none; stroke-width: 1.5px; }
+.chart-line, .context-chart-line { fill: none; stroke-width: 1.5px; }
 
 .chart-tooltip {
   box-shadow: 0 2px 10px #aaaaaa;
@@ -25,17 +25,17 @@
 .grid .tick { stroke: lightgrey; opacity: 0.7; }
 .grid path { stroke-width: 0; }
 
-.focus-brush rect {
+.context-brush rect {
   fill-opacity: 0;
 }
-.focus-brush .resize path {
+.context-brush .resize path {
   fill: #eee;
   stroke: #666;
 }
 
-.focus-brush-background rect {
+.context-brush-background rect {
   stroke: black;
   stroke-width: .4;
   fill: white;
-  fill-opacity: .7;
+  fill-opacity: .6;
 }
