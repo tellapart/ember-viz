@@ -544,7 +544,7 @@ $(function() {
     // brushExtent: [new Date(1387495796000), new Date(1388446196000)],
     defaultHeight: 400,
     defaultWidth: 600,
-    contextHeightRatio: 0.25,
+    contextHeight: 70,
 
     x2Scale: function() {
       return d3.time.scale.utc()
@@ -609,17 +609,11 @@ $(function() {
 
     }.property('_data', 'forceX', 'brushExtent'),
 
-
-    contextHeight: function() {
-      var contextHeightRatio = this.get('contextHeightRatio'),
-          height = this.get('height');
-      return contextHeightRatio * height;
-    }.property('height', 'contextHeightRatio'),
-
     _contextChartHeight: function() {
       var contextHeight = this.get('contextHeight'),
           margins = this.get('margins');
-      return contextHeight - margins.bottom - margins.top;
+      return contextHeight - margins.bottom;
+      // return contextHeight - margins.bottom - margins.top;
     }.property('contextHeight'),
 
     // Override this height to create space for the context chart.
@@ -705,6 +699,7 @@ $(function() {
       // Add and size the main svg element for the chart and create the main 'g'
       // container for all of the chart components.
       g = d3.select('#' + elementId).append('svg')
+        .attr('class', 'ev-svg')
         .attr('width', width)
         .attr('height', height)
         .append('g')
