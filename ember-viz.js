@@ -59,7 +59,7 @@
      * Public variables that can be overwritten.
      **************************************************************************/
 
-    classNames: ['line-chart'],
+    classNames: ['ev-line-chart'],
 
     // Default options. User can override any or all of them by setting an
     // 'options' attribute upon component creation.
@@ -73,8 +73,8 @@
     // the CSS formats it. If CSS doesn't specify a size, then these default
     // values are used. To force a specific size, override the 'height' and
     // 'width' attributes or apply CSS height and width styles to the div.
-    defaultHeight: 200,
-    defaultWidth: 400,
+    defaultWidth: 600,
+    defaultHeightRatio: 0.5,
 
     showTooltip: true,
     timeFormatter: d3.time.format.utc,
@@ -114,12 +114,16 @@
     height: function() {
       var elementId = this.get('elementId'),
           $container = $('#' + elementId),
-          height = $container.height();
+          height = $container.height(),
+          heightRatio = this.get('defaultHeightRatio'),
+          width = this.get('width');
 
       if (height == 0) {
         // The browser didn't determine a height for the div, so fall back to
         // a default height.
-        return this.get('defaultHeight');
+
+        return heightRatio * width;
+        // return this.get('defaultHeight');
       }
       return height;
     }.property(),
@@ -170,14 +174,14 @@
         return timeFormatter('%m/%d');
       }
 
-      // If more than 5 days are being displayed, only show month and date on the
-      // axis labels.
+      // If more than 5 days are being displayed, only show month and date on
+      // the axis labels.
       if (totalTimeRange > 5 * MILLISECONDS_IN_DAY) {
         return timeFormatter('%m/%d');
       }
 
-      // If we're showing more than one day, but still not enough days to get rid
-      // of time altogether, show both the date and time.
+      // If we're showing more than one day, but still not enough days to get
+      // rid of time altogether, show both the date and time.
       if (totalTimeRange > MILLISECONDS_IN_DAY) {
         return timeFormatter('%m/%d %H:%M');
       }
@@ -205,6 +209,18 @@
 
     }.property('_data', 'forceX'),
 
+    tooltipContentFn: function() {
+      var valueFormatFn = this.get('valueFormatFn'),
+          timeFormatFn = this.get('timeFormatFn');
+
+      return function(elem, seriesName) {
+        return '<h5>' + seriesName + '</h5>' +
+               '<hr />' +
+               '<p>' + valueFormatFn(elem.y) + ' at ' +
+               timeFormatFn(new Date(elem.x)) + '</p>';
+      }
+    }.property('valueFormatFn', 'timeFormatFn'),
+
     /***************************************************************************
      * Private variables and functions that should not be overwritten.
      **************************************************************************/
@@ -222,18 +238,6 @@
 
       return width - margins.right - margins.left;
     }.property('width'),
-
-    tooltipContentFn: function() {
-      var valueFormatFn = this.get('valueFormatFn'),
-          timeFormatFn = this.get('timeFormatFn');
-
-      return function(elem, seriesName) {
-        return '<h5>' + seriesName + '</h5>' +
-               '<hr />' +
-               '<p>' + valueFormatFn(elem.y) + ' at ' +
-               timeFormatFn(new Date(elem.x)) + '</p>';
-      }
-    }.property('valueFormatFn', 'timeFormatFn'),
 
     _getAverageGranularity: function(data) {
       var count = 0;
@@ -273,10 +277,10 @@
         series.values.forEach(function(elem) {
           x = xCache[elem.x];
 
-          // Cache the scaled timestamps. It's only efficient to store the cached
-          // scaling of the timestamp because each timestamp is probably going to
-          // be repeated for each series. Y values are not as likely to be
-          // repeated.
+          // Cache the scaled timestamps. It's only efficient to store the
+          // cached scaling of the timestamp because each timestamp is probably
+          // going to be repeated for each series. Y values are not as likely
+          // to be repeated.
           if (x == undefined) {
             x = xScale(elem.x);
             xCache[elem.x] = x;
@@ -296,8 +300,8 @@
           yDist,
           searchRadius = this.get('tooltipSearchRadius'),
 
-          // Initialize the "closest" point to one unit past the furthest possible
-          // point that is still inside the bounding box.
+          // Initialize the "closest" point to one unit past the furthest
+          // possible point that is still inside the bounding box.
           minDistSq = 2 * (searchRadius) * (searchRadius) + 1;
 
       data.forEach(function(series) {
@@ -313,8 +317,8 @@
           if (yDist > searchRadius || yDist < -1 * searchRadius) return;
 
           // Check if the proxy distance (distance squared, so as to avoid
-          // unnecessary computation time for the square root) is closer than the
-          // closest existing point.
+          // unnecessary computation time for the square root) is closer than
+          // the closest existing point.
           curDistSq = xDist * xDist + yDist * yDist;
           if (curDistSq < minDistSq) {
             closestPoint = elem;
@@ -329,6 +333,57 @@
         seriesName: seriesName
       };
     },
+    _handleMouseMove: function() {
+      var self = this,
+          _data = this.get('_data'),
+          margins = this.get('margins'),
+          elementId = this.get('elementId'),
+          $tooltipDiv = this.get('_tooltipDiv'),
+          // $('#' + elementId + ' .ev-chart-tooltip'),
+          // tooltipCircle = d3.select('#' + elementId + ' .ev-tooltip-circle'),
+          tooltipCircle = this.get('_tooltipCircle'),
+          tooltipContentFn = this.get('tooltipContentFn');
+
+      return function() {
+        var html,
+            newLeft,
+            newTop,
+            closestPoint,
+            position = d3.mouse(this),
+            xPosition = position[0],
+            yPosition = position[1],
+            closestPointInfo = self._findClosestPoint(_data, xPosition,
+                                                      yPosition);
+
+        // If a closest point was found inside the appropriate radius,
+        // display information about that point.
+        if (closestPointInfo) {
+          closestPoint = closestPointInfo.point;
+          html = tooltipContentFn(closestPoint, closestPointInfo.seriesName);
+
+          // Update the tooltipDiv contents.
+          $tooltipDiv.html(html);
+
+          // Move the tooltip div near the closest point.
+          newLeft = margins.left + closestPoint.xPx;
+          newTop = closestPoint.yPx - $tooltipDiv.height() - 10;
+          $tooltipDiv
+            .css('display', 'inline')
+            .css('left', newLeft)
+            .css('top', newTop);
+
+          // Position the tooltipCircle around the closest point.
+          tooltipCircle.style('display', 'inline')
+                       .attr('cx', closestPoint.xPx + 'px')
+                       .attr('cy', closestPoint.yPx + 'px');
+        } else {
+          // Hide the tooltip
+          $tooltipDiv.css('display', 'none');
+          tooltipCircle.style('display', 'none');
+        }
+      }
+    }.property('_tooltipDiv', '_tooltipCircle'),
+
     didInsertElement: function() {
       var self = this,
           previousResizeFn = window.onresize;
@@ -339,6 +394,8 @@
 
       // Re-render the chart when the window is resized.
       window.onresize = function() {
+        self.notifyPropertyChange('height');
+        self.notifyPropertyChange('width');
         self._render();
         if (previousResizeFn !== null) {
           previousResizeFn();
@@ -347,7 +404,8 @@
     },
     _render: function() {
 
-      var line,
+      var _handleMouseMove,
+          line,
           svg,
           tooltipCircle,
           xAxis,
@@ -357,6 +415,7 @@
           _data = this.get('_data'),
           _mainChartHeight = this.get('_mainChartHeight'),
           _mainChartWidth = this.get('_mainChartWidth'),
+
 
           elementId = this.get('elementId'),
           $container = $('#' + elementId),
@@ -368,7 +427,6 @@
           margins = this.get('margins'),
           self = this,
           showTooltip = this.get('showTooltip'),
-          tooltipContentFn = this.get('tooltipContentFn'),
           valueFormatFn = this.get('valueFormatFn'),
           xScale = this.get('xScale'),
           xTickFormat = this.get('timeTickFormatFn'),
@@ -387,38 +445,41 @@
       // Add and size the main svg element for the chart and create the main 'g'
       // container for all of the chart components.
       svg = d3.select('#' + elementId).append('svg')
+        .attr('class', 'ev-svg')
         .attr('width', width)
         .attr('height', height)
         .append('g')
-        .attr('transform', 'translate(' + margins.left + ',' + margins.top + ')');
+        .attr('transform',
+              'translate(' + margins.left + ',' + margins.top + ')');
 
       // Create and add the tooltip div.
-      $tooltipDiv = $('<div>').addClass('chart-tooltip');
+      $tooltipDiv = $('<div>').addClass('ev-chart-tooltip');
       $container.append($tooltipDiv);
+      this.set('_tooltipDiv', $tooltipDiv);
 
       // Add the x axis.
       xAxis = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat);
       svg.append('g')
-          .attr('class', 'x axis')
+          .attr('class', 'x ev-axis')
           .attr('transform', 'translate(0,' + _mainChartHeight + ')')
           .call(xAxis);
 
       // Add the y axis.
       yAxis = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat);
       svg.append('g')
-          .attr('class', 'y axis')
+          .attr('class', 'y ev-axis')
           .call(yAxis);
 
       // Add the grid lines.
       svg.append('g')
-         .attr('class', 'grid')
+         .attr('class', 'ev-grid')
          .attr('transform', 'translate(0,' + _mainChartHeight + ')')
          .call(Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat)
                     .tickSize(-1 * _mainChartHeight, 0, 0)
                     .tickFormat('')
          );
       svg.append('g')
-         .attr('class', 'grid')
+         .attr('class', 'ev-grid')
          .call(Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat)
                     .tickSize(-1 * _mainChartWidth, 0, 0)
                     .tickFormat('')
@@ -429,62 +490,30 @@
           .x(function(d) { return xScale(d.x); })
           .y(function(d) { return yScale(d.y); });
 
-      svg.selectAll('.chart-line')
+      svg.selectAll('.ev-chart-line')
          .data(_data)
        .enter()
          .append('path')
-         .attr('class', 'chart-line')
+         .attr('class', 'ev-chart-line')
          .attr('d', function(d) { return line(d.values); })
          .style('stroke', _colorFn);
 
       if (showTooltip) {
         // Add a circle for use with the tooltip.
         tooltipCircle = svg.append('circle')
-                           .attr('class', 'tooltip-circle')
+                           .attr('class', 'ev-tooltip-circle')
                            .attr('cx', 0)
                            .attr('cy', 0)
                            .attr('r', 5);
+        this.set('_tooltipCircle', tooltipCircle);
+        _handleMouseMove = this.get('_handleMouseMove');
 
         // Add an invisible rectangle to detect mouse movements.
         svg.append('rect')
            .attr('width', _mainChartWidth)
            .attr('height', _mainChartHeight)
            .style('opacity', 0)
-           .on('mousemove', function() {
-
-             var html,
-                 newLeft,
-                 newTop,
-                 closestPoint,
-                 position = d3.mouse(this),
-                 xPosition = position[0],
-                 yPosition = position[1],
-                 closestPointInfo = self._findClosestPoint(_data, xPosition, yPosition);
-
-             // If a closest point was found inside the appropriate radius,
-             // display information about that point.
-             if (closestPointInfo) {
-               closestPoint = closestPointInfo.point;
-               newLeft = margins.left + closestPoint.xPx;
-               newTop = margins.top + closestPoint.yPx - $tooltipDiv.height() - 10;
-               html = tooltipContentFn(closestPoint, closestPointInfo.seriesName);
-
-               // Move the tooltip div near the closest point.
-               $tooltipDiv.html(html)
-                         .css('display', 'inline')
-                         .css('left', newLeft)
-                         .css('top', newTop);
-
-               // Position the tooltipCircle around the closest point.
-               tooltipCircle.style('display', 'inline')
-                            .attr('cx', closestPoint.xPx + 'px')
-                            .attr('cy', closestPoint.yPx + 'px');
-             } else {
-               // Hide the tooltip
-               $tooltipDiv.css('display', 'none');
-               tooltipCircle.style('display', 'none');
-             }
-           })
+           .on('mousemove', _handleMouseMove)
 
            // Hide the tooltip when the mouse leaves the hover rectangle.
            .on('mouseout', function() {
@@ -499,17 +528,22 @@
       }
 
       // TODO: Allow the developer to bind event handlers. (onclick, etc.)
-    }.observes('_data')
+    }.observes('timeTickFormatFn',
+               'valueTickFormatFn', 'tooltipContentFn')
   });
 
   Ember.Handlebars.helper('line-chart', Ember.EmberViz.LineChartComponent);
 }) ();
 
 $(function() {
-  Ember.EmberViz.FocusWithContextChartComponent = Ember.EmberViz.LineChartComponent.extend({
-    classNames: ['focus-with-context-chart'],
-    // brushExtent: null,
-    brushExtent: [new Date(1387495796000), new Date(1388446196000)],
+  Ember.EmberViz.FocusWithContextChartComponent =
+    Ember.EmberViz.LineChartComponent.extend({
+
+    classNames: ['ev-focus-with-context-chart'],
+    brushExtent: null,
+    // brushExtent: [new Date(1387495796000), new Date(1388446196000)],
+    defaultHeight: 400,
+    defaultWidth: 600,
     contextHeightRatio: 0.25,
 
     x2Scale: function() {
@@ -566,7 +600,6 @@ $(function() {
           });
         });
         domain = [minValue, maxValue];
-        console.log('Domain:', domain);
       } else {
         domain = Ember.EmberViz.Helpers.getDomain(data,
                                                    function(d) { return d.y; });
@@ -607,6 +640,7 @@ $(function() {
           gBrush,
           tooltipCircle,
           $tooltipDiv,
+          _handleMouseMove,
           _colorFn = this.get('_colorFn'),
           _data = this.get('_data'),
           _mainChartHeight = this.get('_mainChartHeight'),
@@ -679,21 +713,22 @@ $(function() {
               'translate(' + margins.left + ',' + margins.top + ')');
 
       // Create and add the tooltip div.
-      $tooltipDiv = $('<div>').addClass('chart-tooltip');
+      $tooltipDiv = $('<div>').addClass('ev-chart-tooltip');
       $container.append($tooltipDiv);
+      this.set('_tooltipDiv', $tooltipDiv);
 
       // Add the axes.
       g.append('g')
-       .attr('class', 'axis main-x-axis')
+       .attr('class', 'ev-axis main-x-axis')
        .attr('transform', 'translate(0,' + _mainChartHeight + ')')
        .call(xAxis);
 
       g.append('g')
-       .attr('class', 'axis main-y-axis')
+       .attr('class', 'ev-axis main-y-axis')
        .call(yAxis);
 
       g.append('g')
-       .attr('class', 'axis context-x-axis')
+       .attr('class', 'ev-axis context-x-axis')
        .attr('transform',
              'translate(0,' + (_mainChartHeight + _contextChartHeight +
                                margins.bottom) + ')')
@@ -701,7 +736,7 @@ $(function() {
 
       // Add the grid lines.
       g.append('g')
-       .attr('class', 'grid main-x-grid')
+       .attr('class', 'ev-grid main-x-grid')
        .attr('transform', 'translate(0,' + _mainChartHeight + ')')
        .call(xGrid);
       g.select('.main-y-grid')
@@ -717,23 +752,23 @@ $(function() {
 
       // Add the chart lines.
       g.append('g')
-       .attr('class', 'chart-lines')
-       .selectAll('.chart-line')
+       .attr('class', 'ev-chart-lines')
+       .selectAll('.ev-chart-line')
        .data(_data)
        .enter()
         .append('path')
-        .attr('class', 'chart-line')
+        .attr('class', 'ev-chart-line')
         .attr('clip-path', 'url(#' + clipPathId + ')')
         .attr('d', function(d) { return line(d.values); })
         .style('stroke', _colorFn);
 
       g.append('g')
-       .attr('class', 'context-chart-lines')
-       .selectAll('.context-chart-line')
+       .attr('class', 'ev-context-chart-lines')
+       .selectAll('.ev-context-chart-line')
        .data(_data)
       .enter()
        .append('path')
-       .attr('class', 'context-chart-line')
+       .attr('class', 'ev-context-chart-line')
        .attr('transform',
              'translate(0,' + (_mainChartHeight + margins.bottom) + ')')
        .attr('d', function(d) { return line2(d.values); })
@@ -742,10 +777,13 @@ $(function() {
       if (showTooltip) {
         // Add a circle for use with the tooltip.
         tooltipCircle = g.append('circle')
-                         .attr('class', 'tooltip-circle')
+                         .attr('class', 'ev-tooltip-circle')
                          .attr('cx', 0)
                          .attr('cy', 0)
                          .attr('r', 5);
+        this.set('_tooltipCircle', tooltipCircle);
+
+        _handleMouseMove = this.get('_handleMouseMove');
 
         // Add an invisible rectangle to detect mouse movements.
         g.append('rect')
@@ -753,41 +791,7 @@ $(function() {
          .attr('width', _mainChartWidth)
          .attr('height', _mainChartHeight)
          .style('opacity', 0)
-         .on('mousemove', function() {
-
-           var html,
-               newLeft,
-               newTop,
-               closestPoint,
-               position = d3.mouse(this),
-               xPosition = position[0],
-               yPosition = position[1],
-               closestPointInfo = self._findClosestPoint(_data, xPosition, yPosition);
-
-           // If a closest point was found inside the appropriate radius,
-           // display information about that point.
-           if (closestPointInfo) {
-             closestPoint = closestPointInfo.point;
-             newLeft = margins.left + closestPoint.xPx;
-             newTop = margins.top + closestPoint.yPx - $tooltipDiv.height() - 10;
-             html = tooltipContentFn(closestPoint, closestPointInfo.seriesName);
-
-             // Move the tooltip div near the closest point.
-             $tooltipDiv.html(html)
-                       .css('display', 'inline')
-                       .css('left', newLeft)
-                       .css('top', newTop);
-
-             // Position the tooltipCircle around the closest point.
-             tooltipCircle.style('display', 'inline')
-                          .attr('cx', closestPoint.xPx + 'px')
-                          .attr('cy', closestPoint.yPx + 'px');
-           } else {
-             // Hide the tooltip
-             $tooltipDiv.css('display', 'none');
-             tooltipCircle.style('display', 'none');
-           }
-         })
+         .on('mousemove', _handleMouseMove)
 
          // Hide the tooltip when the mouse leaves the hover rectangle.
          .on('mouseout', function() {
@@ -814,14 +818,15 @@ $(function() {
       }
 
       contextG = g.append('g')
-        .attr('transform', 'translate(0,' + (_mainChartHeight + margins.bottom) + ')');
+        .attr('transform',
+              'translate(0,' + (_mainChartHeight + margins.bottom) + ')');
       contextG.append('g')
-        .attr('class', 'context-brush-background');
+        .attr('class', 'ev-context-brush-background');
       contextG.append('g')
-        .attr('class', 'context-brush');
+        .attr('class', 'ev-context-brush');
 
-      brushBG = contextG.select('.context-brush-background').selectAll('g')
-        .data([brush.extent()])
+      brushBG = contextG.select('.ev-context-brush-background').selectAll('g')
+        .data([brush.extent()]);
 
       brushBGenter = brushBG.enter()
         .append('g');
@@ -838,7 +843,7 @@ $(function() {
         .attr('y', 0)
         .attr('height', _contextChartHeight);
 
-      gBrush = contextG.select('.context-brush')
+      gBrush = contextG.select('.ev-context-brush')
         .call(brush);
       gBrush.selectAll('rect')
         .attr('height', _contextChartHeight);
@@ -868,12 +873,12 @@ $(function() {
 
         xScale.domain(xDomain);
         yScale.domain(yDomain);
-        g.select('.chart-lines')
-         .selectAll('.chart-line')
+        g.select('.ev-chart-lines')
+         .selectAll('.ev-chart-line')
          .attr('d', function(d) { return line(d.values); });
-        g.select('.axis.main-x-axis')
+        g.select('.ev-axis.main-x-axis')
          .call(xAxis);
-        g.select('.axis.main-y-axis')
+        g.select('.ev-axis.main-y-axis')
          .call(yAxis);
 
         updateBrushBG();
@@ -886,8 +891,10 @@ $(function() {
       onBrush();
 
       // TODO: Allow the developer to bind event handlers. (onclick, etc.)
-    }.observes('_data')
+    }.observes('timeTickFormatFn',
+               'valueTickFormatFn', 'tooltipContentFn')
   });
 
-  Ember.Handlebars.helper('focus-with-context-chart', Ember.EmberViz.FocusWithContextChartComponent);
+  Ember.Handlebars.helper('focus-with-context-chart',
+                          Ember.EmberViz.FocusWithContextChartComponent);
 });
