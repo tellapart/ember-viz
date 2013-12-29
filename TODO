@@ -1,0 +1,4 @@
+- Remove most of the computed properties, but still share code between the
+  chart types.
+- Consolidate the legend code between charts.
+- Add bar charts.

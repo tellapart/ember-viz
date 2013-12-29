@@ -1,7 +1,13 @@
 .ev-axis path,
 .ev-axis line { fill: none; stroke: #000; shape-rendering: crispEdges; }
 
-.ev-svg { display: block; }
+.ev-svg {
+  display: block;
+
+  /* Only needed to override nvd3 */
+  width: initial;
+  height: initial;
+}
 .ev-line-chart { position: relative; }
 .ev-chart-line, .ev-context-chart-line { fill: none; stroke-width: 1.5px; }
 
@@ -42,4 +48,17 @@
   stroke-width: .4;
   fill: white;
   fill-opacity: .6;
+}
+
+.ev-legend {
+  overflow-y: scroll;
+  padding: 10px;
+  margin: 0 10px 0 10px;
+  border: 1px solid black;
+}
+
+.ev-legend svg { display: inline; }
+.ev-legend div {
+  float: left;
+  padding: 0 5px 0 5px;
 }

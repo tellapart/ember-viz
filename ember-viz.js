@@ -5,11 +5,11 @@
 (function() {
   Ember.EmberViz.Helpers = Ember.Namespace.create({
     getDomain: function(seriesArray, accessFunction) {
-
-      var minValue = d3.min(seriesArray,
+      var enabledSeries = seriesArray.rejectBy('disabled');
+      var minValue = d3.min(enabledSeries,
                         function(d) {
                           return d3.min(d.values, accessFunction); }),
-          maxValue = d3.max(seriesArray,
+          maxValue = d3.max(enabledSeries,
                         function(d) {
                           return d3.max(d.values, accessFunction); });
 
@@ -67,6 +67,8 @@
     margins: {top: 20, right: 20, bottom: 30, left: 50},
     forceY: null,
     forceX: null,
+    showLegend: false,
+    legendHeight: 100,
     lineType: d3.svg.line,
 
     // Normally, the component chooses its size based on the container size, as
@@ -80,16 +82,12 @@
     timeFormatter: d3.time.format.utc,
 
     xScale: function() {
-      return d3.time.scale.utc()
-        .domain(this.get('xDomain'))
-        .range([0, this.get('_mainChartWidth')]);
-    }.property('_mainChartWidth', 'xDomain'),
+      return d3.time.scale.utc();
+    }.property(),
 
     yScale: function() {
-      return d3.scale.linear()
-        .domain(this.get('yDomain'))
-        .range([this.get('_mainChartHeight'), 0]);
-    }.property('_mainChartHeight', 'yDomain'),
+      return d3.scale.linear();
+    }.property(),
 
 
     valueFormatFn: d3.format(''),
@@ -141,12 +139,28 @@
       return width;
     }.property(),
 
-    timeFormatFn: function() {
-      var _data = this.get('_data'),
-          xDomain = this.get('xDomain'),
+    /***************************************************************************
+     * Private variables and functions that should not be overwritten.
+     **************************************************************************/
+
+    _getTooltipContentFn: function(valueFormatFn, timeFormatFn) {
+      return function(elem, seriesName) {
+        return '<h5>' + seriesName + '</h5>' +
+               '<hr />' +
+               '<p>' + valueFormatFn(elem.y) + ' at ' +
+               timeFormatFn(new Date(elem.x)) + '</p>';
+      }
+    },
+
+    _getTimeFormatFn: function(data, xDomain) {
+      var timeFormatFn = this.get('timeFormatFn'),
           totalTimeRange = xDomain[1] - xDomain[0],
           timeFormatter = this.get('timeFormatter'),
-          avgGranularity = this._getAverageGranularity(_data);
+          avgGranularity = this._getAverageGranularity(data);
+
+      if (timeFormatFn) {
+        return timeFormatFn;
+      }
 
       // If the average granularity is around or greater than one point per day,
       // only show month and date.
@@ -159,14 +173,18 @@
       }
 
       return timeFormatter('%m/%d %H:%M');
-    }.property('_data'),
+    },
 
-    timeTickFormatFn: function() {
-      var _data = this.get('_data'),
-          xDomain = this.get('xDomain'),
+
+    _getTimeTickFormatFn: function(data, xDomain) {
+      var timeTickFormatFn = this.get('timeTickFormatFn'),
           totalTimeRange = xDomain[1] - xDomain[0],
           timeFormatter = this.get('timeFormatter'),
-          avgGranularity = this._getAverageGranularity(_data);
+          avgGranularity = this._getAverageGranularity(data);
+
+      if (timeTickFormatFn) {
+        return timeTickFormatFn;
+      }
 
       // If the average granularity is around or greater than one point per day,
       // only show month and date.
@@ -189,41 +207,22 @@
       // In the scope of less than a day, show the time without the date.
       return timeFormatter('%H:%M');
 
-    }.property('_data'),
-
-    xDomain: function() {
-      var data = this.get('_data');
+    },
+    _getXDomain: function(data) {
       var domain = Ember.EmberViz.Helpers.getDomain(data,
                                                    function(d) { return d.x; });
 
       return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
 
-    }.property('_data', 'forceX'),
+    },
 
-    yDomain: function() {
-      var data = this.get('_data');
+    _getYDomain: function(data) {
       var domain = Ember.EmberViz.Helpers.getDomain(data,
                                                    function(d) { return d.y; });
 
       return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceY'));
 
-    }.property('_data', 'forceX'),
-
-    tooltipContentFn: function() {
-      var valueFormatFn = this.get('valueFormatFn'),
-          timeFormatFn = this.get('timeFormatFn');
-
-      return function(elem, seriesName) {
-        return '<h5>' + seriesName + '</h5>' +
-               '<hr />' +
-               '<p>' + valueFormatFn(elem.y) + ' at ' +
-               timeFormatFn(new Date(elem.x)) + '</p>';
-      }
-    }.property('valueFormatFn', 'timeFormatFn'),
-
-    /***************************************************************************
-     * Private variables and functions that should not be overwritten.
-     **************************************************************************/
+    },
 
     _mainChartHeight: function() {
       var height = this.get('height'),
@@ -306,6 +305,8 @@
 
       data.forEach(function(series) {
 
+        if (series.disabled) return;
+
         series.values.forEach(function(elem) {
 
           // Check that the x value is within range.
@@ -339,10 +340,12 @@
           margins = this.get('margins'),
           elementId = this.get('elementId'),
           $tooltipDiv = this.get('_tooltipDiv'),
-          // $('#' + elementId + ' .ev-chart-tooltip'),
-          // tooltipCircle = d3.select('#' + elementId + ' .ev-tooltip-circle'),
           tooltipCircle = this.get('_tooltipCircle'),
-          tooltipContentFn = this.get('tooltipContentFn');
+          valueFormatFn = this.get('valueFormatFn'),
+          xDomain = this._getXDomain(_data),
+          timeFormatFn = this._getTimeFormatFn(_data, xDomain),
+          tooltipContentFn = this._getTooltipContentFn(valueFormatFn,
+                                                       timeFormatFn);
 
       return function() {
         var html,
@@ -406,10 +409,14 @@
 
       var _handleMouseMove,
           line,
+          g,
           svg,
           tooltipCircle,
           xAxis,
           yAxis,
+          xDomain,
+          yDomain,
+          xTickFormat,
           $tooltipDiv,
           _colorFn = this.get('_colorFn'),
           _data = this.get('_data'),
@@ -423,14 +430,16 @@
           height = this.get('height'),
           width = this.get('width'),
 
+          legendHeight = this.get('legendHeight'),
           lineType = this.get('lineType'),
           margins = this.get('margins'),
           self = this,
+          showLegend = this.get('showLegend'),
           showTooltip = this.get('showTooltip'),
           valueFormatFn = this.get('valueFormatFn'),
           xScale = this.get('xScale'),
-          xTickFormat = this.get('timeTickFormatFn'),
           yTickFormat = this.get('valueTickFormatFn'),
+
           yScale = this.get('yScale');
 
       // Clear the div.
@@ -442,12 +451,31 @@
         return;
       }
 
+      xDomain = this._getXDomain(_data);
+      yDomain = this._getYDomain(_data);
+      xTickFormat = this._getTimeTickFormatFn(_data, xDomain),
+
+      xScale
+        .domain(xDomain)
+        .range([0, _mainChartWidth]);
+
+      yScale
+        .domain(yDomain)
+        .range([_mainChartHeight, 0]);
+      function lineFn(d) {
+        if (d.disabled) {
+          return line([]);
+        } else {
+          return line(d.values);
+        }
+      }
+
       // Add and size the main svg element for the chart and create the main 'g'
       // container for all of the chart components.
       svg = d3.select('#' + elementId).append('svg')
         .attr('class', 'ev-svg')
-        .attr('width', width)
-        .attr('height', height)
+        .attr('width', width);
+      g = svg
         .append('g')
         .attr('transform',
               'translate(' + margins.left + ',' + margins.top + ')');
@@ -457,50 +485,121 @@
       $container.append($tooltipDiv);
       this.set('_tooltipDiv', $tooltipDiv);
 
-      // Add the x axis.
-      xAxis = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat);
-      svg.append('g')
-          .attr('class', 'x ev-axis')
-          .attr('transform', 'translate(0,' + _mainChartHeight + ')')
-          .call(xAxis);
+      if (showLegend) {
+        var $legendDiv = $('<div class="ev-legend">')
+          .css('max-height', legendHeight);
+        $container.append($legendDiv);
 
-      // Add the y axis.
-      yAxis = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat);
-      svg.append('g')
-          .attr('class', 'y ev-axis')
-          .call(yAxis);
+        // jQuery can't add the svg and circle elements correctly, so switch to
+        // using d3.
+        var legendDiv = d3.select('#' + elementId + ' .ev-legend');
+        _data.forEach(function(elem, index) {
+          var key = elem['key'],
+              color = _colorFn(elem, index),
+              div = legendDiv.append('div');
+
+          var circle = div.append('svg')
+            .attr('class', 'ev-svg')
+            .attr('height', 12)
+            .attr('width', 14)
+          .append('circle')
+            .attr('fill', color)
+            .attr('stroke', 'black')
+            .attr('cx', 6)
+            .attr('cy', 6)
+            .attr('r', 5);
+
+          div.append('a')
+            .text(key + ' ');
+
+          function clickCommon() {
+            var yDomain = self._getYDomain(_data);
+            var xDomain = self._getXDomain(_data);
+
+            xScale.domain(xDomain);
+            yScale.domain(yDomain);
+
+            g.select('.ev-axis.x-axis')
+             .call(xAxis);
+            g.select('.ev-axis.y-axis')
+             .call(yAxis);
+
+            g
+             .selectAll('.ev-chart-line')
+             .attr('d', lineFn);
+            self._precomputePoints(_data, xScale, yScale);
+          }
+          div.on('dblclick', function() {
+            _data.setEach('disabled', true);
+            elem.disabled = false;
+            legendDiv.selectAll('circle')
+              .attr('fill', 'white');
+            circle.attr('fill', color);
+            clickCommon();
+          });
+          div.on('click', function() {
+            elem.disabled = (elem.disabled) ? false : true;
+            if (elem.disabled) {
+              circle.attr('fill', 'white');
+            } else {
+              circle.attr('fill', color);
+            }
+            clickCommon();
+          });
+        });
+
+        // TODO: CLEAN UP THIS NONSENSE
+        var newHeight = height - $legendDiv.outerHeight();
+        svg.attr('height', newHeight);
+        _mainChartHeight -= $legendDiv.outerHeight();
+        yScale.range([_mainChartHeight, 0]);
+      }
 
       // Add the grid lines.
-      svg.append('g')
+      g.append('g')
          .attr('class', 'ev-grid')
          .attr('transform', 'translate(0,' + _mainChartHeight + ')')
          .call(Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat)
                     .tickSize(-1 * _mainChartHeight, 0, 0)
                     .tickFormat('')
          );
-      svg.append('g')
+      g.append('g')
          .attr('class', 'ev-grid')
          .call(Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat)
                     .tickSize(-1 * _mainChartWidth, 0, 0)
                     .tickFormat('')
          );
 
+      // Add the x axis.
+      xAxis = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat);
+      g.append('g')
+          .attr('class', 'x-axis ev-axis')
+          .attr('transform', 'translate(0,' + _mainChartHeight + ')')
+          .call(xAxis);
+
+      // Add the y axis.
+      yAxis = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat);
+      g.append('g')
+          .attr('class', 'y-axis ev-axis')
+          .call(yAxis);
+
       // Add the chart lines.
       line = lineType()
           .x(function(d) { return xScale(d.x); })
           .y(function(d) { return yScale(d.y); });
 
-      svg.selectAll('.ev-chart-line')
-         .data(_data)
+      g.selectAll('.ev-chart-line')
+         .data(_data.filter(function(d) { return !d.disabled; }))
        .enter()
          .append('path')
          .attr('class', 'ev-chart-line')
          .attr('d', function(d) { return line(d.values); })
+         .attr('d', lineFn)
          .style('stroke', _colorFn);
 
       if (showTooltip) {
         // Add a circle for use with the tooltip.
-        tooltipCircle = svg.append('circle')
+        tooltipCircle = g.append('circle')
                            .attr('class', 'ev-tooltip-circle')
                            .attr('cx', 0)
                            .attr('cy', 0)
@@ -509,7 +608,7 @@
         _handleMouseMove = this.get('_handleMouseMove');
 
         // Add an invisible rectangle to detect mouse movements.
-        svg.append('rect')
+        g.append('rect')
            .attr('width', _mainChartWidth)
            .attr('height', _mainChartHeight)
            .style('opacity', 0)
@@ -528,8 +627,7 @@
       }
 
       // TODO: Allow the developer to bind event handlers. (onclick, etc.)
-    }.observes('timeTickFormatFn',
-               'valueTickFormatFn', 'tooltipContentFn')
+    }.observes('_data')
   });
 
   Ember.Handlebars.helper('line-chart', Ember.EmberViz.LineChartComponent);
@@ -541,28 +639,21 @@ $(function() {
 
     classNames: ['ev-focus-with-context-chart'],
     brushExtent: null,
-    // brushExtent: [new Date(1387495796000), new Date(1388446196000)],
     defaultHeight: 400,
     defaultWidth: 600,
-    contextHeight: 70,
+    contextHeight: 60,
 
     x2Scale: function() {
-      return d3.time.scale.utc()
-        .domain(this.get('x2Domain'))
-        .range([0, this.get('_mainChartWidth')]);
-    }.property('_mainChartWidth', 'x2Domain'),
+      return d3.time.scale.utc();
+    }.property(),
 
     y2Scale: function() {
-      return d3.scale.linear()
-        .domain(this.get('yDomain'))
-        .range([this.get('_contextChartHeight'), 0]);
-    }.property('_contextChartHeight', 'yDomain'),
+      return d3.scale.linear();
+    }.property(),
 
-    xDomain: function() {
-      var data = this.get('_data'),
-          domain = Ember.EmberViz.Helpers.getDomain(data,
-                                                   function(d) { return d.x; }),
-          brushExtent = this.get('brushExtent');
+    _getXDomain: function(data, brushExtent) {
+      var domain = Ember.EmberViz.Helpers.getDomain(data,
+                                                   function(d) { return d.x; });
 
       if (brushExtent) {
         domain = brushExtent;
@@ -570,21 +661,17 @@ $(function() {
 
       return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
 
-    }.property('_data', 'forceX', 'brushExtent'),
+    },
 
-    x2Domain: function() {
-      var data = this.get('_data'),
-          domain = Ember.EmberViz.Helpers.getDomain(data,
+    _getX2Domain: function(data) {
+      var domain = Ember.EmberViz.Helpers.getDomain(data,
                                                    function(d) { return d.x; });
 
       return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
 
-    }.property('_data', 'forceX'),
+    },
 
-    yDomain: function() {
-      var domain,
-          data = this.get('_data');
-      var brushExtent = this.get('brushExtent');
+    _getYDomain: function(data, brushExtent) {
 
       if (brushExtent) {
         var minValue = null;
@@ -607,7 +694,7 @@ $(function() {
 
       return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceY'));
 
-    }.property('_data', 'forceX', 'brushExtent'),
+    },
 
     _contextChartHeight: function() {
       var contextHeight = this.get('contextHeight'),
@@ -628,12 +715,16 @@ $(function() {
     _render: function() {
 
       var g,
+          svg,
           contextG,
           brushBG,
           brushBGenter,
           gBrush,
           tooltipCircle,
           $tooltipDiv,
+          xDomain,
+          x2Domain,
+          yDomain,
           _handleMouseMove,
           _colorFn = this.get('_colorFn'),
           _data = this.get('_data'),
@@ -648,10 +739,11 @@ $(function() {
           width = this.get('width'),
 
           brushExtent = this.get('brushExtent'),
+          legendHeight = this.get('legendHeight'),
           lineType = this.get('lineType'),
           margins = this.get('margins'),
+          showLegend = this.get('showLegend'),
           showTooltip = this.get('showTooltip'),
-          tooltipContentFn = this.get('tooltipContentFn'),
           self = this,
           valueFormatFn = this.get('valueFormatFn'),
           xScale = this.get('xScale'),
@@ -661,6 +753,14 @@ $(function() {
           yScale = this.get('yScale'),
           y2Scale = this.get('y2Scale');
 
+      function lineFn(d) {
+        if (d.disabled) {
+          return line([]);
+        } else {
+          return line(d.values);
+        }
+      }
+
       // Clear the div.
       $container.empty();
 
@@ -669,6 +769,28 @@ $(function() {
         // TODO: Show some indication that there is no data.
         return;
       }
+
+      xDomain = this._getXDomain(_data, brushExtent);
+      x2Domain = this._getX2Domain(_data);
+      yDomain = this._getYDomain(_data, brushExtent);
+      y2Domain = this._getYDomain(_data);
+      xTickFormat = this._getTimeTickFormatFn(_data, xDomain),
+
+      xScale
+        .domain(xDomain)
+        .range([0, _mainChartWidth]);
+
+      yScale
+        .domain(yDomain)
+        .range([_mainChartHeight, 0]);
+
+      x2Scale
+        .domain(x2Domain)
+        .range([0, _mainChartWidth]);
+
+      y2Scale
+        .domain(y2Domain)
+        .range([_contextChartHeight, 0]);
 
       xAxis = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat);
       yAxis = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat);
@@ -698,19 +820,100 @@ $(function() {
 
       // Add and size the main svg element for the chart and create the main 'g'
       // container for all of the chart components.
-      g = d3.select('#' + elementId).append('svg')
+      svg = d3.select('#' + elementId)
+        .append('svg')
         .attr('class', 'ev-svg')
         .attr('width', width)
-        .attr('height', height)
+        .attr('height', height);
+      g = svg
         .append('g')
         .attr('class', 'ember-viz-chart')
         .attr('transform',
               'translate(' + margins.left + ',' + margins.top + ')');
 
+      if (showLegend) {
+        var $legendDiv = $('<div class="ev-legend">')
+          .css('max-height', legendHeight);
+        $container.append($legendDiv);
+
+        // jQuery can't add the svg and circle elements correctly, so switch to
+        // using d3.
+        var legendDiv = d3.select('#' + elementId + ' .ev-legend');
+        _data.forEach(function(elem, index) {
+          var key = elem['key'],
+              color = _colorFn(elem, index),
+              div = legendDiv.append('div');
+
+          var circle = div.append('svg')
+            .attr('class', 'ev-svg')
+            .attr('height', 12)
+            .attr('width', 14)
+          .append('circle')
+            .attr('fill', color)
+            .attr('stroke', 'black')
+            .attr('cx', 6)
+            .attr('cy', 6)
+            .attr('r', 5);
+
+          div.append('a')
+            .text(key + ' ');
+
+          function clickCommon() {
+            var yDomain = self._getYDomain(_data);
+            var xDomain = self._getXDomain(_data);
+
+            xScale.domain(xDomain);
+            yScale.domain(yDomain);
+
+            g.select('.ev-axis.main-x-axis')
+             .call(xAxis);
+            g.select('.ev-axis.main-y-axis')
+             .call(yAxis);
+
+            g
+             .selectAll('.ev-chart-line')
+             .attr('d', lineFn);
+            self._precomputePoints(_data, xScale, yScale);
+          }
+          div.on('dblclick', function() {
+            _data.setEach('disabled', true);
+            elem.disabled = false;
+            legendDiv.selectAll('circle')
+              .attr('fill', 'white');
+            circle.attr('fill', color);
+            clickCommon();
+          });
+          div.on('click', function() {
+            elem.disabled = (elem.disabled) ? false : true;
+            if (elem.disabled) {
+              circle.attr('fill', 'white');
+            } else {
+              circle.attr('fill', color);
+            }
+            clickCommon();
+          });
+        });
+
+        // TODO: CLEAN UP THIS NONSENSE
+        var newHeight = height - $legendDiv.outerHeight();
+        svg.attr('height', newHeight);
+        _mainChartHeight -= $legendDiv.outerHeight();
+        yScale.range([_mainChartHeight, 0]);
+      }
       // Create and add the tooltip div.
       $tooltipDiv = $('<div>').addClass('ev-chart-tooltip');
       $container.append($tooltipDiv);
       this.set('_tooltipDiv', $tooltipDiv);
+
+      // Add the grid lines.
+      g.append('g')
+       .attr('class', 'ev-grid main-x-grid')
+       .attr('transform', 'translate(0,' + _mainChartHeight + ')')
+       .call(xGrid);
+
+      g.append('g')
+       .attr('class', 'ev-grid main-y-grid')
+       .call(yGrid);
 
       // Add the axes.
       g.append('g')
@@ -729,14 +932,6 @@ $(function() {
                                margins.bottom) + ')')
        .call(x2Axis);
 
-      // Add the grid lines.
-      g.append('g')
-       .attr('class', 'ev-grid main-x-grid')
-       .attr('transform', 'translate(0,' + _mainChartHeight + ')')
-       .call(xGrid);
-      g.select('.main-y-grid')
-       .call(yGrid);
-
       // Add the clip path to hide the lines outside of the main window.
       var clipPathId = elementId + '-clip-path';
       g.append('clipPath')
@@ -754,7 +949,7 @@ $(function() {
         .append('path')
         .attr('class', 'ev-chart-line')
         .attr('clip-path', 'url(#' + clipPathId + ')')
-        .attr('d', function(d) { return line(d.values); })
+        .attr('d', lineFn)
         .style('stroke', _colorFn);
 
       g.append('g')
@@ -861,10 +1056,14 @@ $(function() {
       }
       function onBrush() {
         brushExtent = brush.empty() ? null : brush.extent();
-        self.set('brushExtent', brushExtent);
+        // self.set('brushExtent', brushExtent);
 
-        var xDomain = self.get('xDomain');
-        var yDomain = self.get('yDomain');
+        xDomain = self._getXDomain(_data, brushExtent);
+        yDomain = self._getYDomain(_data, brushExtent);
+
+
+        xTickFormat = self._getTimeTickFormatFn(_data, xDomain);
+        xAxis = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat);
 
         xScale.domain(xDomain);
         yScale.domain(yDomain);
@@ -886,8 +1085,7 @@ $(function() {
       onBrush();
 
       // TODO: Allow the developer to bind event handlers. (onclick, etc.)
-    }.observes('timeTickFormatFn',
-               'valueTickFormatFn', 'tooltipContentFn')
+    }.observes('_data')
   });
 
   Ember.Handlebars.helper('focus-with-context-chart',
