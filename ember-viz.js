@@ -152,6 +152,17 @@
       }
     },
 
+    _getLineFn: function(line) {
+      return function(d) {
+        if (d.disabled) {
+          return line([]);
+        } else {
+          return line(d.values);
+        }
+      };
+
+    },
+
     _getTimeFormatFn: function(data, xDomain) {
       var timeFormatFn = this.get('timeFormatFn'),
           totalTimeRange = xDomain[1] - xDomain[0],
@@ -378,7 +389,17 @@
           // Position the tooltipCircle around the closest point.
           tooltipCircle.style('display', 'inline')
                        .attr('cx', closestPoint.xPx + 'px')
-                       .attr('cy', closestPoint.yPx + 'px');
+                       .attr('cy', closestPoint.yPx + 'px')
+                       .attr('r', 3)
+                       .style('opacity', 0.3)
+                       .transition()
+                       .duration(150)
+                       .attrTween('r', function(d, i, a) {
+                         return d3.interpolate(a, 7);
+                       })
+                       .styleTween('opacity', function(d, i, a) {
+                         return d3.interpolate(a, 0.8);
+                       });
         } else {
           // Hide the tooltip
           $tooltipDiv.css('display', 'none');
@@ -409,11 +430,14 @@
 
       var _handleMouseMove,
           line,
+          lineFn,
           g,
           svg,
           tooltipCircle,
           xAxis,
           yAxis,
+          xGrid,
+          yGrid,
           xDomain,
           yDomain,
           xTickFormat,
@@ -453,22 +477,7 @@
 
       xDomain = this._getXDomain(_data);
       yDomain = this._getYDomain(_data);
-      xTickFormat = this._getTimeTickFormatFn(_data, xDomain),
-
-      xScale
-        .domain(xDomain)
-        .range([0, _mainChartWidth]);
-
-      yScale
-        .domain(yDomain)
-        .range([_mainChartHeight, 0]);
-      function lineFn(d) {
-        if (d.disabled) {
-          return line([]);
-        } else {
-          return line(d.values);
-        }
-      }
+      xTickFormat = this._getTimeTickFormatFn(_data, xDomain);
 
       // Add and size the main svg element for the chart and create the main 'g'
       // container for all of the chart components.
@@ -479,11 +488,6 @@
         .append('g')
         .attr('transform',
               'translate(' + margins.left + ',' + margins.top + ')');
-
-      // Create and add the tooltip div.
-      $tooltipDiv = $('<div>').addClass('ev-chart-tooltip');
-      $container.append($tooltipDiv);
-      this.set('_tooltipDiv', $tooltipDiv);
 
       if (showLegend) {
         var $legendDiv = $('<div class="ev-legend">')
@@ -519,32 +523,44 @@
             xScale.domain(xDomain);
             yScale.domain(yDomain);
 
+            g.select('.ev-grid.y-grid')
+             .call(yGrid);
             g.select('.ev-axis.x-axis')
              .call(xAxis);
             g.select('.ev-axis.y-axis')
              .call(yAxis);
 
-            g
-             .selectAll('.ev-chart-line')
+            g.selectAll('.ev-chart-line')
              .attr('d', lineFn);
             self._precomputePoints(_data, xScale, yScale);
           }
+          var clickTimeoutId = 0,
+              doubleclick = false;
           div.on('dblclick', function() {
+            doubleclick = true;
             _data.setEach('disabled', true);
             elem.disabled = false;
             legendDiv.selectAll('circle')
               .attr('fill', 'white');
             circle.attr('fill', color);
             clickCommon();
+            window.setTimeout(function() { doubleclick = false; }, 800);
           });
           div.on('click', function() {
-            elem.disabled = (elem.disabled) ? false : true;
-            if (elem.disabled) {
-              circle.attr('fill', 'white');
-            } else {
-              circle.attr('fill', color);
+            if (!clickTimeoutId) {
+              clickTimeoutId = window.setTimeout(function() {
+                if (!doubleclick) {
+                  elem.disabled = (elem.disabled) ? false : true;
+                  if (elem.disabled) {
+                    circle.attr('fill', 'white');
+                  } else {
+                    circle.attr('fill', color);
+                  }
+                  clickCommon();
+                }
+                clickTimeoutId = 0;
+              }, 200);
             }
-            clickCommon();
           });
         });
 
@@ -555,20 +571,42 @@
         yScale.range([_mainChartHeight, 0]);
       }
 
+      xScale
+        .domain(xDomain)
+        .range([0, _mainChartWidth]);
+
+      yScale
+        .domain(yDomain)
+        .range([_mainChartHeight, 0]);
+
+      line = lineType()
+          .x(function(d) { return xScale(d.x); })
+          .y(function(d) { return yScale(d.y); });
+
+      lineFn = this._getLineFn(line);
+
+      // Create and add the tooltip div.
+      $tooltipDiv = $('<div>').addClass('ev-chart-tooltip');
+      $container.append($tooltipDiv);
+      this.set('_tooltipDiv', $tooltipDiv);
+
       // Add the grid lines.
+      xGrid = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat)
+        .tickSize(-1 * _mainChartHeight, 0, 0)
+        .tickFormat('');
+
       g.append('g')
-         .attr('class', 'ev-grid')
+         .attr('class', 'ev-grid x-grid')
          .attr('transform', 'translate(0,' + _mainChartHeight + ')')
-         .call(Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat)
-                    .tickSize(-1 * _mainChartHeight, 0, 0)
-                    .tickFormat('')
-         );
+         .call(xGrid);
+
+      yGrid = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat)
+        .tickSize(-1 * _mainChartWidth, 0, 0)
+        .tickFormat('');
+
       g.append('g')
-         .attr('class', 'ev-grid')
-         .call(Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat)
-                    .tickSize(-1 * _mainChartWidth, 0, 0)
-                    .tickFormat('')
-         );
+         .attr('class', 'ev-grid y-grid')
+         .call(yGrid);
 
       // Add the x axis.
       xAxis = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat);
@@ -584,10 +622,6 @@
           .call(yAxis);
 
       // Add the chart lines.
-      line = lineType()
-          .x(function(d) { return xScale(d.x); })
-          .y(function(d) { return yScale(d.y); });
-
       g.selectAll('.ev-chart-line')
          .data(_data.filter(function(d) { return !d.disabled; }))
        .enter()
@@ -720,6 +754,7 @@ $(function() {
           brushBG,
           brushBGenter,
           gBrush,
+          lineFn,
           tooltipCircle,
           $tooltipDiv,
           xDomain,
@@ -753,14 +788,6 @@ $(function() {
           yScale = this.get('yScale'),
           y2Scale = this.get('y2Scale');
 
-      function lineFn(d) {
-        if (d.disabled) {
-          return line([]);
-        } else {
-          return line(d.values);
-        }
-      }
-
       // Clear the div.
       $container.empty();
 
@@ -775,48 +802,6 @@ $(function() {
       yDomain = this._getYDomain(_data, brushExtent);
       y2Domain = this._getYDomain(_data);
       xTickFormat = this._getTimeTickFormatFn(_data, xDomain),
-
-      xScale
-        .domain(xDomain)
-        .range([0, _mainChartWidth]);
-
-      yScale
-        .domain(yDomain)
-        .range([_mainChartHeight, 0]);
-
-      x2Scale
-        .domain(x2Domain)
-        .range([0, _mainChartWidth]);
-
-      y2Scale
-        .domain(y2Domain)
-        .range([_contextChartHeight, 0]);
-
-      xAxis = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat);
-      yAxis = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat);
-      x2Axis = Ember.EmberViz.Helpers.makeXAxisElement(x2Scale, xTickFormat);
-
-      xGrid = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat)
-        .tickSize(-1 * _mainChartHeight, 0, 0)
-        .tickFormat('');
-      yGrid = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat)
-        .tickSize(-1 * _mainChartWidth, 0, 0)
-        .tickFormat('');
-
-      line = lineType()
-          .x(function(d) { return xScale(d.x); })
-          .y(function(d) { return yScale(d.y); });
-      line2 = lineType()
-          .x(function(d) { return x2Scale(d.x); })
-          .y(function(d) { return y2Scale(d.y); });
-
-      var brush = d3.svg.brush()
-        .x(x2Scale)
-        .on('brush', onBrush);
-
-      if (brushExtent) {
-        brush.extent(brushExtent);
-      }
 
       // Add and size the main svg element for the chart and create the main 'g'
       // container for all of the chart components.
@@ -865,6 +850,8 @@ $(function() {
             xScale.domain(xDomain);
             yScale.domain(yDomain);
 
+            g.select('.ev-grid.main-y-grid')
+             .call(yGrid);
             g.select('.ev-axis.main-x-axis')
              .call(xAxis);
             g.select('.ev-axis.main-y-axis')
@@ -900,6 +887,52 @@ $(function() {
         _mainChartHeight -= $legendDiv.outerHeight();
         yScale.range([_mainChartHeight, 0]);
       }
+
+      xScale
+        .domain(xDomain)
+        .range([0, _mainChartWidth]);
+
+      yScale
+        .domain(yDomain)
+        .range([_mainChartHeight, 0]);
+
+      x2Scale
+        .domain(x2Domain)
+        .range([0, _mainChartWidth]);
+
+      y2Scale
+        .domain(y2Domain)
+        .range([_contextChartHeight, 0]);
+
+      xGrid = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat)
+        .tickSize(-1 * _mainChartHeight, 0, 0)
+        .tickFormat('');
+      yGrid = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat)
+        .tickSize(-1 * _mainChartWidth, 0, 0)
+        .tickFormat('');
+
+
+      xAxis = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat);
+      yAxis = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat);
+      x2Axis = Ember.EmberViz.Helpers.makeXAxisElement(x2Scale, xTickFormat);
+
+      line = lineType()
+          .x(function(d) { return xScale(d.x); })
+          .y(function(d) { return yScale(d.y); });
+      line2 = lineType()
+          .x(function(d) { return x2Scale(d.x); })
+          .y(function(d) { return y2Scale(d.y); });
+
+      lineFn = this._getLineFn(line);
+
+      var brush = d3.svg.brush()
+        .x(x2Scale)
+        .on('brush', onBrush);
+
+      if (brushExtent) {
+        brush.extent(brushExtent);
+      }
+
       // Create and add the tooltip div.
       $tooltipDiv = $('<div>').addClass('ev-chart-tooltip');
       $container.append($tooltipDiv);
@@ -1070,6 +1103,10 @@ $(function() {
         g.select('.ev-chart-lines')
          .selectAll('.ev-chart-line')
          .attr('d', function(d) { return line(d.values); });
+        g.select('.ev-grid.main-x-grid')
+         .call(xGrid);
+        g.select('.ev-grid.main-y-grid')
+         .call(yGrid);
         g.select('.ev-axis.main-x-axis')
          .call(xAxis);
         g.select('.ev-axis.main-y-axis')
