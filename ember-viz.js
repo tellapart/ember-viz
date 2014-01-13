@@ -40,6 +40,9 @@
                .scale(scale)
                .orient('left')
                .tickFormat(format);
+    },
+    arePointsEqual: function(p1, p2) {
+      return p1 && p2 && p1.x == p2.x && p1.y == p2.y;
     }
 
   });
@@ -350,7 +353,8 @@
       };
     },
     _handleMouseMove: function() {
-      var self = this,
+      var prevClosestPoint,
+          self = this,
           _data = this.get('_data'),
           margins = this.get('margins'),
           elementId = this.get('elementId'),
@@ -390,21 +394,31 @@
             .css('left', newLeft)
             .css('top', newTop);
 
+          // If the closest point is different this time, reset the
+          // tooltipCircle in preparation for the transition animation.
+          if (!Ember.EmberViz.Helpers.arePointsEqual(closestPoint,
+                                                     prevClosestPoint)) {
+            tooltipCircle.style('display', 'inline')
+              .attr('cx', closestPoint.xPx + 'px')
+              .attr('cy', closestPoint.yPx + 'px')
+              .attr('r', 3)
+              .style('opacity', 0.3);
+          }
+
           // Position the tooltipCircle around the closest point.
           tooltipCircle.style('display', 'inline')
-                       .attr('cx', closestPoint.xPx + 'px')
-                       .attr('cy', closestPoint.yPx + 'px')
-                       .attr('r', 3)
-                       .style('opacity', 0.3)
-                       .transition()
-                       .duration(150)
-                       .attrTween('r', function(d, i, a) {
-                         return d3.interpolate(a, 7);
-                       })
-                       .styleTween('opacity', function(d, i, a) {
-                         return d3.interpolate(a, 0.8);
-                       });
+            .transition()
+            .duration(150)
+            .attrTween('r', function(d, i, a) {
+              return d3.interpolate(a, 7);
+            })
+            .styleTween('opacity', function(d, i, a) {
+              return d3.interpolate(a, 0.8);
+            });
+
+            prevClosestPoint = closestPoint;
         } else {
+          prevClosestPoint = null;
           // Hide the tooltip
           $tooltipDiv.css('display', 'none');
           tooltipCircle.style('display', 'none');
@@ -412,10 +426,39 @@
       }
     }.property('_tooltipDiv', '_tooltipCircle'),
 
-    didInsertElement: function() {
-      console.log('Inserting element');
+    _handleMouseClick: function() {
       var self = this,
-          previousResizeFn = window.onresize;
+          _data = this.get('_data'),
+          margins = this.get('margins'),
+          userOnClick = this.get('onClick');
+
+      return function() {
+        var html,
+            closestPoint,
+            position = d3.mouse(this),
+            xPosition = position[0],
+            yPosition = position[1],
+            closestPointInfo = self._findClosestPoint(_data, xPosition,
+                                                      yPosition);
+
+        // If a closest point was found inside the appropriate radius, pass the
+        // location and data to the user provided callback;
+        if (userOnClick) {
+          if (closestPointInfo) {
+            closestPoint = closestPointInfo.point;
+            userOnClick({x: position[0],      y: position[1]},
+                        {x: closestPoint.xPx, y: closestPoint.yPx},
+                        {x: closestPoint.x,   y: closestPoint.y});
+          } else {
+            userOnClick({x: position[0], y: position[1]}, null, null);
+          }
+        }
+      };
+
+    }.property('onClick'),
+
+    didInsertElement: function() {
+      var self = this;
 
       this.notifyPropertyChange('height');
       this.notifyPropertyChange('width');
@@ -423,20 +466,18 @@
       this._render();
 
       // Re-render the chart when the window is resized.
-      window.onresize = function() {
+      $(window).resize(function() {
         self.notifyPropertyChange('height');
         self.notifyPropertyChange('width');
         self._render();
-        if (previousResizeFn !== null) {
-          previousResizeFn();
-        }
-      };
+      });
     },
     _render: function() {
       var shouldRender = this.get('shouldRender');
       if (!shouldRender) return;
 
       var _handleMouseMove,
+          _handleMouseClick,
           line,
           lineFn,
           g,
@@ -648,6 +689,7 @@
                            .attr('r', 5);
         this.set('_tooltipCircle', tooltipCircle);
         _handleMouseMove = this.get('_handleMouseMove');
+        _handleMouseClick = this.get('_handleMouseClick');
 
         // Add an invisible rectangle to detect mouse movements.
         g.append('rect')
@@ -655,6 +697,7 @@
            .attr('height', _mainChartHeight)
            .style('opacity', 0)
            .on('mousemove', _handleMouseMove)
+           .on('click', _handleMouseClick)
 
            // Hide the tooltip when the mouse leaves the hover rectangle.
            .on('mouseout', function() {
@@ -713,7 +756,7 @@ $(function() {
 
     },
 
-    _getYDomain: function(data, brushExtent) {
+    _getYDomain: function(data, brushExtent, overrideDomain) {
 
       if (brushExtent) {
         var minValue = null;
@@ -734,7 +777,12 @@ $(function() {
                                                    function(d) { return d.y; });
       }
 
-      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceY'));
+      if (overrideDomain) {
+        return Ember.EmberViz.Helpers.overrideDomain(domain,
+                                                     this.get('forceY'));
+      } else {
+        return domain;
+      }
 
     },
 
@@ -770,6 +818,7 @@ $(function() {
           xDomain,
           x2Domain,
           yDomain,
+          _handleMouseClick,
           _handleMouseMove,
           _colorFn = this.get('_colorFn'),
           _data = this.get('_data'),
@@ -790,6 +839,7 @@ $(function() {
           showLegend = this.get('showLegend'),
           showTooltip = this.get('showTooltip'),
           self = this,
+          userOnBrush = this.get('onBrush'),
           valueFormatFn = this.get('valueFormatFn'),
           xScale = this.get('xScale'),
           x2Scale = this.get('x2Scale'),
@@ -809,8 +859,8 @@ $(function() {
 
       xDomain = this._getXDomain(_data, brushExtent);
       x2Domain = this._getX2Domain(_data);
-      yDomain = this._getYDomain(_data, brushExtent);
-      y2Domain = this._getYDomain(_data);
+      yDomain = this._getYDomain(_data, brushExtent, true);
+      y2Domain = this._getYDomain(_data, null, false);
       xTickFormat = this._getTimeTickFormatFn(_data, xDomain),
 
       // Add and size the main svg element for the chart and create the main 'g'
@@ -854,8 +904,8 @@ $(function() {
             .text(key + ' ');
 
           function clickCommon() {
-            var yDomain = self._getYDomain(_data);
-            var xDomain = self._getXDomain(_data);
+            var yDomain = self._getYDomain(_data, brushExtent, true);
+            var xDomain = self._getXDomain(_data, brushExtent);
 
             xScale.domain(xDomain);
             yScale.domain(yDomain);
@@ -1016,6 +1066,7 @@ $(function() {
                          .attr('r', 5);
         this.set('_tooltipCircle', tooltipCircle);
 
+        _handleMouseClick = this.get('_handleMouseClick');
         _handleMouseMove = this.get('_handleMouseMove');
 
         // Add an invisible rectangle to detect mouse movements.
@@ -1025,6 +1076,7 @@ $(function() {
          .attr('height', _mainChartHeight)
          .style('opacity', 0)
          .on('mousemove', _handleMouseMove)
+         .on('click', _handleMouseClick)
 
          // Hide the tooltip when the mouse leaves the hover rectangle.
          .on('mouseout', function() {
@@ -1102,7 +1154,7 @@ $(function() {
         // self.set('brushExtent', brushExtent);
 
         xDomain = self._getXDomain(_data, brushExtent);
-        yDomain = self._getYDomain(_data, brushExtent);
+        yDomain = self._getYDomain(_data, brushExtent, true);
 
 
         xTickFormat = self._getTimeTickFormatFn(_data, xDomain);
@@ -1126,6 +1178,11 @@ $(function() {
 
         if (showTooltip) {
           self._precomputePoints(_data, xScale, yScale);
+        }
+
+        // If the user supplied an onbrush callback, call it.
+        if (userOnBrush) {
+          userOnBrush();
         }
       }
 
