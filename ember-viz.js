@@ -70,6 +70,7 @@
     showLegend: false,
     legendHeight: 100,
     lineType: d3.svg.line,
+    shouldRender: false,
 
     // Normally, the component chooses its size based on the container size, as
     // the CSS formats it. If CSS doesn't specify a size, then these default
@@ -98,6 +99,7 @@
     }.on('init'),
 
     applyUserOptions: function() {
+      console.log('Applying user options');
       var options = this.getWithDefault('options', Ember.Object.create()),
           keys = Ember.keys(options);
 
@@ -106,6 +108,8 @@
       keys.forEach(function(elem) {
         this.set(elem, options.get(elem));
       }, this);
+
+      this._render();
 
     }.observes('options'),
 
@@ -409,11 +413,13 @@
     }.property('_tooltipDiv', '_tooltipCircle'),
 
     didInsertElement: function() {
+      console.log('Inserting element');
       var self = this,
           previousResizeFn = window.onresize;
 
       this.notifyPropertyChange('height');
       this.notifyPropertyChange('width');
+      this.set('shouldRender', true);
       this._render();
 
       // Re-render the chart when the window is resized.
@@ -427,6 +433,8 @@
       };
     },
     _render: function() {
+      var shouldRender = this.get('shouldRender');
+      if (!shouldRender) return;
 
       var _handleMouseMove,
           line,
@@ -747,6 +755,8 @@ $(function() {
     }.property('height', 'contextHeight', 'margins'),
 
     _render: function() {
+      var shouldRender = this.get('shouldRender');
+      if (!shouldRender) return;
 
       var g,
           svg,
