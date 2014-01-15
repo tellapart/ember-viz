@@ -676,7 +676,6 @@
        .enter()
          .append('path')
          .attr('class', 'ev-chart-line')
-         .attr('d', function(d) { return line(d.values); })
          .attr('d', lineFn)
          .style('stroke', _colorFn);
 
@@ -758,11 +757,13 @@ $(function() {
 
     _getYDomain: function(data, brushExtent, overrideDomain) {
 
+      debugger;
       if (brushExtent) {
         var minValue = null;
         var maxValue = null;
 
-        data.forEach(function(series) {
+        var enabledSeries = data.rejectBy('disabled');
+        enabledSeries.forEach(function(series) {
           series.values.forEach(function(point) {
 
             if (point.x >= brushExtent[0] && point.x <= brushExtent[1]) {
@@ -1164,7 +1165,7 @@ $(function() {
         yScale.domain(yDomain);
         g.select('.ev-chart-lines')
          .selectAll('.ev-chart-line')
-         .attr('d', function(d) { return line(d.values); });
+         .attr('d', lineFn);
         g.select('.ev-grid.main-x-grid')
          .call(xGrid);
         g.select('.ev-grid.main-y-grid')
@@ -1182,7 +1183,7 @@ $(function() {
 
         // If the user supplied an onbrush callback, call it.
         if (userOnBrush) {
-          userOnBrush();
+          userOnBrush(brushExtent);
         }
       }
 
