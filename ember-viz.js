@@ -68,12 +68,16 @@
     // 'options' attribute upon component creation.
     tooltipSearchRadius: 10,
     margins: {top: 20, right: 20, bottom: 30, left: 50},
+    legendMargins: {top: 0, right: 50, bottom: 0, left: 50},
     forceY: null,
     forceX: null,
     showLegend: false,
     legendHeight: 100,
     lineType: d3.svg.line,
     shouldRender: false,
+
+    onRender: null,
+    onClick: null,
 
     // Normally, the component chooses its size based on the container size, as
     // the CSS formats it. If CSS doesn't specify a size, then these default
@@ -85,6 +89,8 @@
     showTooltip: true,
     timeFormatter: d3.time.format.utc,
 
+    // Scales need to be computed properties so that multiple charts on a page
+    // don't share the created scale.
     xScale: function() {
       return d3.time.scale.utc();
     }.property(),
@@ -506,14 +512,16 @@
           legendHeight = this.get('legendHeight'),
           lineType = this.get('lineType'),
           margins = this.get('margins'),
+          legendMargins = this.get('legendMargins'),
           self = this,
           showLegend = this.get('showLegend'),
           showTooltip = this.get('showTooltip'),
           valueFormatFn = this.get('valueFormatFn'),
           xScale = this.get('xScale'),
+          yScale = this.get('yScale'),
           yTickFormat = this.get('valueTickFormatFn'),
-
-          yScale = this.get('yScale');
+          
+          userOnRender = this.get('onRender');
 
       // Clear the div.
       $container.empty();
@@ -540,7 +548,11 @@
 
       if (showLegend) {
         var $legendDiv = $('<div class="ev-legend">')
-          .css('max-height', legendHeight);
+          .css('max-height', legendHeight)
+          .css('margin-top', legendMargins.top)
+          .css('margin-right', legendMargins.right)
+          .css('margin-bottom', legendMargins.bottom)
+          .css('margin-left', legendMargins.left);
         $container.append($legendDiv);
 
         // jQuery can't add the svg and circle elements correctly, so switch to
@@ -710,6 +722,10 @@
         this._precomputePoints(_data, xScale, yScale);
       }
 
+      if (userOnRender) {
+        userOnRender();
+      }
+
       // TODO: Allow the developer to bind event handlers. (onclick, etc.)
     }.observes('_data')
   });
@@ -725,8 +741,14 @@ $(function() {
     brushExtent: null,
     defaultHeight: 400,
     defaultWidth: 600,
-    contextHeight: 60,
+    contextHeight: 70,
+    contextWidth: Ember.computed.alias('width'),
+    contextMargins: {top: 10, right: 20, bottom: 30, left: 50},
 
+    onBrush: null,
+
+    // Scales need to be computed properties so that multiple charts on a page
+    // don't share the created scale.
     x2Scale: function() {
       return d3.time.scale.utc();
     }.property(),
@@ -757,7 +779,6 @@ $(function() {
 
     _getYDomain: function(data, brushExtent, overrideDomain) {
 
-      debugger;
       if (brushExtent) {
         var minValue = null;
         var maxValue = null;
@@ -789,10 +810,15 @@ $(function() {
 
     _contextChartHeight: function() {
       var contextHeight = this.get('contextHeight'),
-          margins = this.get('margins');
-      return contextHeight - margins.bottom;
-      // return contextHeight - margins.bottom - margins.top;
+          margins = this.get('contextMargins');
+      return contextHeight - margins.bottom - margins.top;
     }.property('contextHeight'),
+
+    _contextChartWidth: function() {
+      var contextWidth = this.get('contextWidth'),
+          margins = this.get('contextMargins');
+      return contextWidth - margins.left - margins.right;
+    }.property('contextWidth'),
 
     // Override this height to create space for the context chart.
     _mainChartHeight: function() {
@@ -826,6 +852,7 @@ $(function() {
           _mainChartHeight = this.get('_mainChartHeight'),
           _contextChartHeight = this.get('_contextChartHeight'),
           _mainChartWidth = this.get('_mainChartWidth'),
+          _contextChartWidth = this.get('_contextChartWidth'),
 
           elementId = this.get('elementId'),
           $container = $('#' + elementId),
@@ -837,17 +864,21 @@ $(function() {
           legendHeight = this.get('legendHeight'),
           lineType = this.get('lineType'),
           margins = this.get('margins'),
+          contextMargins = this.get('contextMargins'),
+          legendMargins = this.get('legendMargins'),
           showLegend = this.get('showLegend'),
           showTooltip = this.get('showTooltip'),
           self = this,
-          userOnBrush = this.get('onBrush'),
           valueFormatFn = this.get('valueFormatFn'),
           xScale = this.get('xScale'),
           x2Scale = this.get('x2Scale'),
           xTickFormat = this.get('timeTickFormatFn'),
           yTickFormat = this.get('valueTickFormatFn'),
           yScale = this.get('yScale'),
-          y2Scale = this.get('y2Scale');
+          y2Scale = this.get('y2Scale'),
+
+          userOnBrush = this.get('onBrush'),
+          userOnRender = this.get('onRender');
 
       // Clear the div.
       $container.empty();
@@ -879,7 +910,11 @@ $(function() {
 
       if (showLegend) {
         var $legendDiv = $('<div class="ev-legend">')
-          .css('max-height', legendHeight);
+          .css('max-height', legendHeight)
+          .css('margin-top', legendMargins.top)
+          .css('margin-right', legendMargins.right)
+          .css('margin-bottom', legendMargins.bottom)
+          .css('margin-left', legendMargins.left);
         $container.append($legendDiv);
 
         // jQuery can't add the svg and circle elements correctly, so switch to
@@ -959,7 +994,7 @@ $(function() {
 
       x2Scale
         .domain(x2Domain)
-        .range([0, _mainChartWidth]);
+        .range([0, _contextChartWidth]);
 
       y2Scale
         .domain(y2Domain)
@@ -1022,8 +1057,8 @@ $(function() {
       g.append('g')
        .attr('class', 'ev-axis context-x-axis')
        .attr('transform',
-             'translate(0,' + (_mainChartHeight + _contextChartHeight +
-                               margins.bottom) + ')')
+             'translate(0,' + (_mainChartHeight + margins.bottom +
+                               _contextChartHeight + contextMargins.top) + ')')
        .call(x2Axis);
 
       // Add the clip path to hide the lines outside of the main window.
@@ -1054,7 +1089,8 @@ $(function() {
        .append('path')
        .attr('class', 'ev-context-chart-line')
        .attr('transform',
-             'translate(0,' + (_mainChartHeight + margins.bottom) + ')')
+             'translate(0,' + (_mainChartHeight + margins.bottom +
+                               contextMargins.top) + ')')
        .attr('d', function(d) { return line2(d.values); })
        .style('stroke', _colorFn);
 
@@ -1105,7 +1141,8 @@ $(function() {
 
       contextG = g.append('g')
         .attr('transform',
-              'translate(0,' + (_mainChartHeight + margins.bottom) + ')');
+              'translate(0,' + (_mainChartHeight + margins.bottom +
+                                contextMargins.top) + ')');
       contextG.append('g')
         .attr('class', 'ev-context-brush-background');
       contextG.append('g')
@@ -1188,6 +1225,9 @@ $(function() {
       }
 
       onBrush();
+      if (userOnRender) {
+        userOnRender();
+      }
 
       // TODO: Allow the developer to bind event handlers. (onclick, etc.)
     }.observes('_data')

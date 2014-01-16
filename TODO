@@ -1,2 +1,4 @@
+- Add ability to move legend code above main chart.
 - Consolidate the legend code between charts.
 - Add bar charts.
+- More thorough documentation, especially event handlers.
