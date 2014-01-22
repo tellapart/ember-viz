@@ -1,3 +1,4 @@
+- Add clip path to line-chart
 - Add ability to move legend code above main chart.
 - Consolidate the legend code between charts.
 - Add bar charts.

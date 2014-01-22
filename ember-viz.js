@@ -108,7 +108,6 @@
     }.on('init'),
 
     applyUserOptions: function() {
-      console.log('Applying user options');
       var options = this.getWithDefault('options', Ember.Object.create()),
           keys = Ember.keys(options);
 
@@ -134,7 +133,6 @@
         // a default height.
 
         return heightRatio * width;
-        // return this.get('defaultHeight');
       }
       return height;
     }.property(),
@@ -520,7 +518,7 @@
           xScale = this.get('xScale'),
           yScale = this.get('yScale'),
           yTickFormat = this.get('valueTickFormatFn'),
-          
+
           userOnRender = this.get('onRender');
 
       // Clear the div.
@@ -540,7 +538,8 @@
       // container for all of the chart components.
       svg = d3.select('#' + elementId).append('svg')
         .attr('class', 'ev-svg')
-        .attr('width', width);
+        .attr('width', width)
+        .attr('height', height);
       g = svg
         .append('g')
         .attr('transform',
