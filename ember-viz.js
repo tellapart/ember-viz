@@ -370,11 +370,16 @@
           tooltipContentFn = this._getTooltipContentFn(valueFormatFn,
                                                        timeFormatFn);
 
+      var bodyWidth = $('body').width();
+
+      console.log('body width:', bodyWidth);
+
       return function() {
         var html,
             newLeft,
             newTop,
             closestPoint,
+            widthPastWindow,
             position = d3.mouse(this),
             xPosition = position[0],
             yPosition = position[1],
@@ -397,6 +402,14 @@
             .css('display', 'inline')
             .css('left', newLeft)
             .css('top', newTop);
+
+          // Determine if the new location of the tooltip goes off the window
+          // and move it inside the window if that's the case.
+          widthPastWindow = ($tooltipDiv.offset().left + $tooltipDiv.width()) - bodyWidth;
+          if (widthPastWindow > 0) {
+            $tooltipDiv.css('left', newLeft - widthPastWindow);
+          }
+
 
           // If the closest point is different this time, reset the
           // tooltipCircle in preparation for the transition animation.
