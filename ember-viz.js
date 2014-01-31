@@ -557,6 +557,7 @@
         // jQuery can't add the svg and circle elements correctly, so switch to
         // using d3.
         var legendDiv = d3.select('#' + elementId + ' .ev-legend');
+        var actualData = this.get('data');
         _data.forEach(function(elem, index) {
           var key = elem['key'],
               color = _colorFn(elem, index),
@@ -598,8 +599,16 @@
               doubleclick = false;
           div.on('dblclick', function() {
             doubleclick = true;
+
+            // Communicate the disabled status of each element back to the
+            // original data array.
+            actualData.setEach('disabled', true);
+            actualData[index].disabled = false;
+
+            // Record the disabled status of each element in the internal array.
             _data.setEach('disabled', true);
             elem.disabled = false;
+
             legendDiv.selectAll('circle')
               .attr('fill', 'white');
             circle.attr('fill', color);
@@ -919,6 +928,7 @@ $(function() {
         // jQuery can't add the svg and circle elements correctly, so switch to
         // using d3.
         var legendDiv = d3.select('#' + elementId + ' .ev-legend');
+        var actualData = this.get('data');
         _data.forEach(function(elem, index) {
           var key = elem['key'],
               color = _colorFn(elem, index),
@@ -952,21 +962,30 @@ $(function() {
             g.select('.ev-axis.main-y-axis')
              .call(yAxis);
 
-            g
-             .selectAll('.ev-chart-line')
+            g.selectAll('.ev-chart-line')
              .attr('d', lineFn);
             self._precomputePoints(_data, xScale, yScale);
           }
           div.on('dblclick', function() {
+            // Communicate the disabled status of each element back to the
+            // original data array.
+            actualData.setEach('disabled', true);
+            actualData[index].disabled = false;
+
+            // Record the disabled status of each element in the internal array.
             _data.setEach('disabled', true);
             elem.disabled = false;
+
             legendDiv.selectAll('circle')
               .attr('fill', 'white');
             circle.attr('fill', color);
             clickCommon();
           });
           div.on('click', function() {
-            elem.disabled = (elem.disabled) ? false : true;
+            var disabledStatus = (elem.disabled) ? false : true;
+            elem.disabled = disabledStatus
+            actualData[index].disabled = disabledStatus;
+
             if (elem.disabled) {
               circle.attr('fill', 'white');
             } else {
@@ -1188,7 +1207,6 @@ $(function() {
       }
       function onBrush() {
         brushExtent = brush.empty() ? null : brush.extent();
-        // self.set('brushExtent', brushExtent);
 
         xDomain = self._getXDomain(_data, brushExtent);
         yDomain = self._getYDomain(_data, brushExtent, true);
@@ -1228,7 +1246,6 @@ $(function() {
         userOnRender();
       }
 
-      // TODO: Allow the developer to bind event handlers. (onclick, etc.)
     }.observes('_data')
   });
 
