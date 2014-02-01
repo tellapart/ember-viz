@@ -78,6 +78,7 @@
 
     onRender: null,
     onClick: null,
+    onMouseMove: null,
 
     // Normally, the component chooses its size based on the container size, as
     // the CSS formats it. If CSS doesn't specify a size, then these default
@@ -385,6 +386,7 @@
             yPosition = position[1],
             closestPointInfo = self._findClosestPoint(_data, xPosition,
                                                       yPosition);
+            userMouseMove = self.get('onMouseMove');
 
         // If a closest point was found inside the appropriate radius,
         // display information about that point.
@@ -432,6 +434,13 @@
             .styleTween('opacity', function(d, i, a) {
               return d3.interpolate(a, 0.8);
             });
+
+            if (userMouseMove){
+              userMouseMove(
+                {x: position[0], y: position[1]},
+                {x: closestPoint.xPx, y: closestPoint.yPx},
+                {x: closestPoint.x,   y: closestPoint.y});
+            }
 
             prevClosestPoint = closestPoint;
         } else {
