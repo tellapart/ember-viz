@@ -51,6 +51,8 @@
 (function() {
   var MILLISECONDS_IN_DAY = 86400000;
   var MILLISECONDS_IN_MINUTE = 60000;
+  var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
+    ' EmberViz usage details.';
 
   /*
    * Basic chart view to display a chart with no manipulation of the provided
@@ -75,6 +77,8 @@
     legendHeight: 100,
     lineType: d3.svg.line,
     shouldRender: false,
+    getX: function(elem) { return elem.x; },
+    getY: function(elem) { return elem.y; },
 
     onRender: null,
     onClick: null,
@@ -283,11 +287,59 @@
     }.property(),
 
     _data: function() {
-      var data = this.get('data');
+      var data = this.get('data'),
+          getX = this.get('getX'),
+          getY = this.get('getY');
+
+      // Verify that the getX and getY attributes are functions.
+      if (typeof getX !== 'function') {
+        throw 'Provided "getX" attribute is not a valid function. ' + 
+          SEE_DOCUMENTATION_MSG;
+      }
+      if (typeof getY !== 'function') {
+        throw 'Provided "getY" attribute is not a valid function. ' +
+          SEE_DOCUMENTATION_MSG;
+      }
 
       // Make a deep copy of data to avoid manipulating the controller's clean
       // data.
-      return Ember.copy(data, true);
+      return data.map(function(series) {
+        var valuesCopy = series.values.map(function(elem) {
+          var x,
+              y,
+              xError = 'Could not extract a valid datapoint using' +
+                ' the supplied "getX" function.' + SEE_DOCUMENTATION_MSG,
+              yError = 'Could not extract a valid datapoint using' +
+                ' the supplied "getY" function.' + SEE_DOCUMENTATION_MSG;
+          
+          // Use the getX and getY functions to extract the x and y values from
+          // each datapoint.
+          try {
+            x = getX(elem);
+          } catch (e) {
+            throw xError;
+          }
+          try {
+            y = getY(elem);
+          } catch (e) {
+            throw yError;
+          }
+
+          // Verify that the extracted values are actually numbers.
+          if (isNaN(x)) throw xError;
+          if (isNaN(y)) throw yError;
+
+          return {
+            x: x,
+            y: y
+          };
+        });
+
+        return {
+          key: series.key,
+          values: valuesCopy
+        };
+      });
     }.property('data.[]'),
 
     _precomputePoints: function(data, xScale, yScale) {
