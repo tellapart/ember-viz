@@ -80,6 +80,8 @@
     getX: function(elem) { return elem.x; },
     getY: function(elem) { return elem.y; },
 
+    tooltipContentFn: null,
+
     onRender: null,
     onClick: null,
     onMouseMove: null,
@@ -160,11 +162,16 @@
      **************************************************************************/
 
     _getTooltipContentFn: function(valueFormatFn, timeFormatFn) {
-      return function(elem, seriesName) {
+      var tooltipContentFn = this.get('tooltipContentFn');
+
+      // If the user provided a tooltip content function, return it.
+      if (tooltipContentFn) return tooltipContentFn;
+
+      return function(x, y, elem, seriesName) {
         return '<h5>' + seriesName + '</h5>' +
                '<hr />' +
-               '<p>' + valueFormatFn(elem.y) + ' at ' +
-               timeFormatFn(new Date(elem.x)) + '</p>';
+               '<p>' + valueFormatFn(y) + ' at ' +
+               timeFormatFn(new Date(x)) + '</p>';
       }
     },
 
@@ -179,15 +186,13 @@
 
     },
 
-    _getTimeFormatFn: function(data, xDomain) {
+    _getTimeFormatFn: function(data) {
       var timeFormatFn = this.get('timeFormatFn'),
-          totalTimeRange = xDomain[1] - xDomain[0],
           timeFormatter = this.get('timeFormatter'),
           avgGranularity = this._getAverageGranularity(data);
 
-      if (timeFormatFn) {
-        return timeFormatFn;
-      }
+      // If the user provided a time format function, return it.
+      if (timeFormatFn) return timeFormatFn;
 
       // If the average granularity is around or greater than one point per day,
       // only show month and date.
@@ -195,10 +200,13 @@
         return timeFormatter('%m/%d');
       }
 
+      // If the average granularity is less than a minute, show the month, date,
+      // hour, minute, and second.
       if (avgGranularity <= MILLISECONDS_IN_MINUTE) {
         return timeFormatter('%m/%d %H:%M:%S');
       }
 
+      // Otherwise, show month, date, hour, and minute.
       return timeFormatter('%m/%d %H:%M');
     },
 
@@ -293,7 +301,7 @@
 
       // Verify that the getX and getY attributes are functions.
       if (typeof getX !== 'function') {
-        throw 'Provided "getX" attribute is not a valid function. ' + 
+        throw 'Provided "getX" attribute is not a valid function. ' +
           SEE_DOCUMENTATION_MSG;
       }
       if (typeof getY !== 'function') {
@@ -311,7 +319,7 @@
                 ' the supplied "getX" function.' + SEE_DOCUMENTATION_MSG,
               yError = 'Could not extract a valid datapoint using' +
                 ' the supplied "getY" function.' + SEE_DOCUMENTATION_MSG;
-          
+
           // Use the getX and getY functions to extract the x and y values from
           // each datapoint.
           try {
@@ -331,7 +339,8 @@
 
           return {
             x: x,
-            y: y
+            y: y,
+            original: elem
           };
         });
 
@@ -418,20 +427,18 @@
           $tooltipDiv = this.get('_tooltipDiv'),
           tooltipCircle = this.get('_tooltipCircle'),
           valueFormatFn = this.get('valueFormatFn'),
-          xDomain = this._getXDomain(_data),
-          timeFormatFn = this._getTimeFormatFn(_data, xDomain),
+          timeFormatFn = this._getTimeFormatFn(_data),
           tooltipContentFn = this._getTooltipContentFn(valueFormatFn,
-                                                       timeFormatFn);
-
-      var bodyWidth = $('body').width();
-
-      console.log('body width:', bodyWidth);
+                                                       timeFormatFn),
+          bodyWidth = $('body').width();
 
       return function() {
         var html,
             newLeft,
             newTop,
             closestPoint,
+            closestPointPosition,
+            closestPointValues,
             widthPastWindow,
             position = d3.mouse(this),
             xPosition = position[0],
@@ -444,7 +451,9 @@
         // display information about that point.
         if (closestPointInfo) {
           closestPoint = closestPointInfo.point;
-          html = tooltipContentFn(closestPoint, closestPointInfo.seriesName);
+          html = tooltipContentFn(closestPoint.x, closestPoint.y,
+                                  closestPoint.original,
+                                  closestPointInfo.seriesName);
 
           // Update the tooltipDiv contents.
           $tooltipDiv.html(html);
@@ -459,7 +468,8 @@
 
           // Determine if the new location of the tooltip goes off the window
           // and move it inside the window if that's the case.
-          widthPastWindow = ($tooltipDiv.offset().left + $tooltipDiv.width()) - bodyWidth;
+          widthPastWindow = ($tooltipDiv.offset().left + $tooltipDiv.width()) -
+            bodyWidth;
           if (widthPastWindow > 0) {
             $tooltipDiv.css('left', newLeft - widthPastWindow);
           }
@@ -487,11 +497,20 @@
               return d3.interpolate(a, 0.8);
             });
 
-            if (userMouseMove){
+            if (userMouseMove) {
+              if (closestPoint) {
+                closestPointPosition = {
+                  x: closestPoint.xPx,
+                  y: closestPoint.yPx
+                };
+                closestPointValues = {
+                  x: closestPoint.x,
+                  y: closestPoint.y};
+              }
               userMouseMove(
                 {x: position[0], y: position[1]},
-                {x: closestPoint.xPx, y: closestPoint.yPx},
-                {x: closestPoint.x,   y: closestPoint.y});
+                closestPointPosition,
+                closestPointValues);
             }
 
             prevClosestPoint = closestPoint;
@@ -516,6 +535,10 @@
             position = d3.mouse(this),
             xPosition = position[0],
             yPosition = position[1],
+            clickPosition = {
+              x: position[0],
+              y: position[1]
+            },
             closestPointInfo = self._findClosestPoint(_data, xPosition,
                                                       yPosition);
 
@@ -524,11 +547,11 @@
         if (userOnClick) {
           if (closestPointInfo) {
             closestPoint = closestPointInfo.point;
-            userOnClick({x: position[0],      y: position[1]},
+            userOnClick(clickPosition,
                         {x: closestPoint.xPx, y: closestPoint.yPx},
-                        {x: closestPoint.x,   y: closestPoint.y});
+                        {x: closestPoint.x, y: closestPoint.y});
           } else {
-            userOnClick({x: position[0], y: position[1]}, null, null);
+            userOnClick(clickPosition, null, null);
           }
         }
       };
