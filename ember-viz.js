@@ -80,8 +80,7 @@
     getX: function(elem) { return elem.x; },
     getY: function(elem) { return elem.y; },
 
-    tooltipContentFn: null,
-
+    // User defined callbacks.
     onRender: null,
     onClick: null,
     onMouseMove: null,
@@ -94,6 +93,7 @@
     defaultHeightRatio: 0.5,
 
     showTooltip: true,
+    tooltipContentFn: null,
     timeFormatter: d3.time.format.utc,
 
     // Scales need to be computed properties so that multiple charts on a page
@@ -125,7 +125,6 @@
       }, this);
 
       this._render();
-
     }.observes('options'),
 
     height: function() {
@@ -424,8 +423,6 @@
           _data = this.get('_data'),
           margins = this.get('margins'),
           elementId = this.get('elementId'),
-          $tooltipDiv = this.get('_tooltipDiv'),
-          tooltipCircle = this.get('_tooltipCircle'),
           valueFormatFn = this.get('valueFormatFn'),
           timeFormatFn = this._getTimeFormatFn(_data),
           tooltipContentFn = this._getTooltipContentFn(valueFormatFn,
@@ -443,6 +440,8 @@
             position = d3.mouse(this),
             xPosition = position[0],
             yPosition = position[1],
+            $tooltipDiv = $('#' + elementId + ' .ev-chart-tooltip'),
+            tooltipCircle = d3.select('#' + elementId + ' .ev-tooltip-circle'),
             closestPointInfo = self._findClosestPoint(_data, xPosition,
                                                       yPosition);
             userMouseMove = self.get('onMouseMove');
@@ -521,7 +520,21 @@
           tooltipCircle.style('display', 'none');
         }
       }
-    }.property('_tooltipDiv', '_tooltipCircle'),
+    }.property('_data', 'valueFormatFn', 'margins'),
+
+    _handleMouseOut: function() {
+      var elementId = this.get('elementId');
+
+      return function() {
+        // Hide the tooltip.
+        $('#' + elementId + ' .ev-chart-tooltip')
+          .css('display', 'none');
+
+        // Hide the tooltip circle.
+        d3.select('#' + elementId + ' .ev-tooltip-circle')
+          .style('display', 'none');
+      }
+    }.property(),
 
     _handleMouseClick: function() {
       var self = this,
@@ -573,17 +586,131 @@
         self._render();
       });
     },
+    _addContainer: function() {
+      var elementId = this.get('elementId'),
+          width = this.get('width'),
+          height = this.get('height'),
+          margins = this.get('margins');
+
+      // Add and size the main svg element for the chart and create the main 'g'
+      // container for all of the chart components.
+      d3.select('#' + elementId).append('svg')
+        .attr('class', 'ev-svg')
+        .attr('width', width)
+        .attr('height', height)
+      .append('g')
+        .attr('class', 'ev-main')
+        .attr('transform',
+              'translate(' + margins.left + ',' + margins.top + ')');
+
+    },
+    _addLegend: function() {
+      var elementId = this.get('elementId'),
+          legendHeight = this.get('legendHeight'),
+          legendMargins = this.get('legendMargins'),
+          $container = $('#' + elementId),
+          $legendDiv = $('<div class="ev-legend">')
+            .css('max-height', legendHeight)
+            .css('margin-top', legendMargins.top)
+            .css('margin-right', legendMargins.right)
+            .css('margin-bottom', legendMargins.bottom)
+            .css('margin-left', legendMargins.left);
+
+      $container.append($legendDiv);
+    },
+    _addTooltip: function() {
+      var elementId = this.get('elementId'),
+          $container = $('#' + elementId);
+
+      // Create and add the tooltip div.
+      var $tooltipDiv = $('<div>').addClass('ev-chart-tooltip');
+      $container.append($tooltipDiv);
+
+      // Add a circle for use with the tooltip.
+      d3.select('#' + elementId + ' .ev-main')
+        .append('circle')
+        .attr('class', 'ev-tooltip-circle')
+        .attr('cx', 0)
+        .attr('cy', 0)
+        .attr('r', 5);
+    },
+    _addHoverRect: function(height, width) {
+      var elementId = this.get('elementId'),
+          _handleMouseClick = this.get('_handleMouseClick'),
+          _handleMouseMove = this.get('_handleMouseMove'),
+          _handleMouseOut = this.get('_handleMouseOut');
+
+      // Add an invisible rectangle to detect mouse movements.
+      d3.select('#' + elementId + ' .ev-main')
+        .append('rect')
+        .attr('class', 'hover-rect')
+        .attr('width', width)
+        .attr('height', height)
+        .style('opacity', 0)
+        .on('mousemove', _handleMouseMove)
+        .on('click', _handleMouseClick)
+        .on('mouseout', _handleMouseOut);
+
+    },
+    _addChartLines: function(height, width, data, lineFn) {
+      // Add the clip path to hide the lines outside of the main window.
+      var elementId = this.get('elementId'),
+          clipPathId = elementId + '-clip-path',
+          g = d3.select('#' + elementId + ' .ev-main'),
+          colorFn = this.get('_colorFn');
+
+      g.append('clipPath')
+       .attr('id', clipPathId)
+       .append('rect')
+       .attr('width', width)
+       .attr('height', height);
+
+      // Add the chart lines.
+      g.append('g')
+       .attr('class', 'ev-chart-lines')
+       .selectAll('.ev-chart-line')
+       .data(data)
+       .enter()
+        .append('path')
+        .attr('class', 'ev-chart-line')
+        .attr('clip-path', 'url(#' + clipPathId + ')')
+        .attr('d', lineFn)
+        .style('stroke', colorFn);
+    },
+    _addMainAxes: function(xAxis, yAxis, height) {
+      var elementId = this.get('elementId'),
+          g = d3.select('#' + elementId + ' .ev-main');
+
+      g.append('g')
+       .attr('class', 'ev-axis main-x-axis')
+       .attr('transform', 'translate(0,' + height + ')')
+       .call(xAxis);
+
+      g.append('g')
+       .attr('class', 'ev-axis main-y-axis')
+       .call(yAxis);
+    },
+    _addMainGrid: function(xGrid, yGrid, height) {
+      var elementId = this.get('elementId'),
+          g = d3.select('#' + elementId + ' .ev-main');
+
+      g.append('g')
+         .attr('class', 'ev-grid main-y-grid')
+         .call(yGrid);
+
+      g.append('g')
+         .attr('class', 'ev-grid main-x-grid')
+         .attr('transform', 'translate(0,' + height + ')')
+         .call(xGrid);
+    },
     _render: function() {
       var shouldRender = this.get('shouldRender');
       if (!shouldRender) return;
 
-      var _handleMouseMove,
-          _handleMouseClick,
-          line,
+      var line,
           lineFn,
           g,
           svg,
-          tooltipCircle,
           xAxis,
           yAxis,
           xGrid,
@@ -591,12 +718,10 @@
           xDomain,
           yDomain,
           xTickFormat,
-          $tooltipDiv,
           _colorFn = this.get('_colorFn'),
           _data = this.get('_data'),
           _mainChartHeight = this.get('_mainChartHeight'),
           _mainChartWidth = this.get('_mainChartWidth'),
-
 
           elementId = this.get('elementId'),
           $container = $('#' + elementId),
@@ -631,25 +756,14 @@
       yDomain = this._getYDomain(_data);
       xTickFormat = this._getTimeTickFormatFn(_data, xDomain);
 
-      // Add and size the main svg element for the chart and create the main 'g'
-      // container for all of the chart components.
-      svg = d3.select('#' + elementId).append('svg')
-        .attr('class', 'ev-svg')
-        .attr('width', width)
-        .attr('height', height);
-      g = svg
-        .append('g')
-        .attr('transform',
-              'translate(' + margins.left + ',' + margins.top + ')');
+      this._addContainer();
+      svg = d3.select('#' + elementId + ' svg');
+      g = d3.select('#' + elementId + ' .ev-main');
 
       if (showLegend) {
-        var $legendDiv = $('<div class="ev-legend">')
-          .css('max-height', legendHeight)
-          .css('margin-top', legendMargins.top)
-          .css('margin-right', legendMargins.right)
-          .css('margin-bottom', legendMargins.bottom)
-          .css('margin-left', legendMargins.left);
-        $container.append($legendDiv);
+
+        this._addLegend();
+        var $legendDiv = $('#' + elementId + ' .ev-legend');
 
         // jQuery can't add the svg and circle elements correctly, so switch to
         // using d3.
@@ -681,11 +795,11 @@
             xScale.domain(xDomain);
             yScale.domain(yDomain);
 
-            g.select('.ev-grid.y-grid')
+            g.select('.ev-grid.main-y-grid')
              .call(yGrid);
-            g.select('.ev-axis.x-axis')
+            g.select('.ev-axis.main-x-axis')
              .call(xAxis);
-            g.select('.ev-axis.y-axis')
+            g.select('.ev-axis.main-y-axis')
              .call(yAxis);
 
             g.selectAll('.ev-chart-line')
@@ -751,79 +865,29 @@
 
       lineFn = this._getLineFn(line);
 
-      // Create and add the tooltip div.
-      $tooltipDiv = $('<div>').addClass('ev-chart-tooltip');
-      $container.append($tooltipDiv);
-      this.set('_tooltipDiv', $tooltipDiv);
-
-      // Add the grid lines.
+      // Create and add the grid lines.
       xGrid = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat)
         .tickSize(-1 * _mainChartHeight, 0, 0)
         .tickFormat('');
-
-      g.append('g')
-         .attr('class', 'ev-grid x-grid')
-         .attr('transform', 'translate(0,' + _mainChartHeight + ')')
-         .call(xGrid);
-
       yGrid = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat)
         .tickSize(-1 * _mainChartWidth, 0, 0)
         .tickFormat('');
 
-      g.append('g')
-         .attr('class', 'ev-grid y-grid')
-         .call(yGrid);
+      this._addMainGrid(xGrid, yGrid, _mainChartHeight);
 
-      // Add the x axis.
+      // Create and add the axes.
       xAxis = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat);
-      g.append('g')
-          .attr('class', 'x-axis ev-axis')
-          .attr('transform', 'translate(0,' + _mainChartHeight + ')')
-          .call(xAxis);
-
-      // Add the y axis.
       yAxis = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat);
-      g.append('g')
-          .attr('class', 'y-axis ev-axis')
-          .call(yAxis);
+      this._addMainAxes(xAxis, yAxis, _mainChartHeight);
 
-      // Add the chart lines.
-      g.selectAll('.ev-chart-line')
-         .data(_data.filter(function(d) { return !d.disabled; }))
-       .enter()
-         .append('path')
-         .attr('class', 'ev-chart-line')
-         .attr('d', lineFn)
-         .style('stroke', _colorFn);
+      this._addChartLines(_mainChartHeight, _mainChartWidth, _data, lineFn);
 
       if (showTooltip) {
-        // Add a circle for use with the tooltip.
-        tooltipCircle = g.append('circle')
-                           .attr('class', 'ev-tooltip-circle')
-                           .attr('cx', 0)
-                           .attr('cy', 0)
-                           .attr('r', 5);
-        this.set('_tooltipCircle', tooltipCircle);
-        _handleMouseMove = this.get('_handleMouseMove');
-        _handleMouseClick = this.get('_handleMouseClick');
-
-        // Add an invisible rectangle to detect mouse movements.
-        g.append('rect')
-           .attr('width', _mainChartWidth)
-           .attr('height', _mainChartHeight)
-           .style('opacity', 0)
-           .on('mousemove', _handleMouseMove)
-           .on('click', _handleMouseClick)
-
-           // Hide the tooltip when the mouse leaves the hover rectangle.
-           .on('mouseout', function() {
-             $tooltipDiv.css('display', 'none');
-             tooltipCircle.style('display', 'none');
-           });
-
+        this._addTooltip();
+        this._addHoverRect(_mainChartHeight, _mainChartWidth);
 
         // Precompute the pixel locations of all the points, but only after the
-        // rest  of the chart is rendered.
+        // rest of the chart is rendered.
         this._precomputePoints(_data, xScale, yScale);
       }
 
@@ -850,17 +914,21 @@ $(function() {
     contextWidth: Ember.computed.alias('width'),
     contextMargins: {top: 10, right: 20, bottom: 30, left: 50},
 
+    // User defined callbacks.
     onBrush: null,
 
     // Scales need to be computed properties so that multiple charts on a page
-    // don't share the created scale.
+    // don't share a single created scale.
     x2Scale: function() {
       return d3.time.scale.utc();
     }.property(),
-
     y2Scale: function() {
       return d3.scale.linear();
     }.property(),
+
+    /***************************************************************************
+     * Private variables and functions that should not be overwritten.
+     **************************************************************************/
 
     _getXDomain: function(data, brushExtent) {
       var domain = Ember.EmberViz.Helpers.getDomain(data,
@@ -884,11 +952,13 @@ $(function() {
 
     _getYDomain: function(data, brushExtent, overrideDomain) {
 
+      // If there is a brushExtent, we should restrict the y domain to the
+      // points within the brushExtent timespan.
       if (brushExtent) {
-        var minValue = null;
-        var maxValue = null;
+        var minValue = null,
+            maxValue = null,
+            enabledSeries = data.rejectBy('disabled');
 
-        var enabledSeries = data.rejectBy('disabled');
         enabledSeries.forEach(function(series) {
           series.values.forEach(function(point) {
 
@@ -910,20 +980,19 @@ $(function() {
       } else {
         return domain;
       }
-
     },
 
     _contextChartHeight: function() {
       var contextHeight = this.get('contextHeight'),
           margins = this.get('contextMargins');
       return contextHeight - margins.bottom - margins.top;
-    }.property('contextHeight'),
+    }.property('contextHeight', 'contextMargins'),
 
     _contextChartWidth: function() {
       var contextWidth = this.get('contextWidth'),
           margins = this.get('contextMargins');
       return contextWidth - margins.left - margins.right;
-    }.property('contextWidth'),
+    }.property('contextWidth', 'contextMargins'),
 
     // Override this height to create space for the context chart.
     _mainChartHeight: function() {
@@ -945,13 +1014,9 @@ $(function() {
           brushBGenter,
           gBrush,
           lineFn,
-          tooltipCircle,
-          $tooltipDiv,
           xDomain,
           x2Domain,
           yDomain,
-          _handleMouseClick,
-          _handleMouseMove,
           _colorFn = this.get('_colorFn'),
           _data = this.get('_data'),
           _mainChartHeight = this.get('_mainChartHeight'),
@@ -1000,27 +1065,14 @@ $(function() {
       y2Domain = this._getYDomain(_data, null, false);
       xTickFormat = this._getTimeTickFormatFn(_data, xDomain),
 
-      // Add and size the main svg element for the chart and create the main 'g'
-      // container for all of the chart components.
-      svg = d3.select('#' + elementId)
-        .append('svg')
-        .attr('class', 'ev-svg')
-        .attr('width', width)
-        .attr('height', height);
-      g = svg
-        .append('g')
-        .attr('class', 'ember-viz-chart')
-        .attr('transform',
-              'translate(' + margins.left + ',' + margins.top + ')');
+      this._addContainer();
+
+      svg = d3.select('#' + elementId + ' svg');
+      g = d3.select('#' + elementId + ' .ev-main');
 
       if (showLegend) {
-        var $legendDiv = $('<div class="ev-legend">')
-          .css('max-height', legendHeight)
-          .css('margin-top', legendMargins.top)
-          .css('margin-right', legendMargins.right)
-          .css('margin-bottom', legendMargins.bottom)
-          .css('margin-left', legendMargins.left);
-        $container.append($legendDiv);
+        this._addLegend();
+        var $legendDiv = $('#' + elementId + ' .ev-legend');
 
         // jQuery can't add the svg and circle elements correctly, so switch to
         // using d3.
@@ -1144,31 +1196,13 @@ $(function() {
         brush.extent(brushExtent);
       }
 
-      // Create and add the tooltip div.
-      $tooltipDiv = $('<div>').addClass('ev-chart-tooltip');
-      $container.append($tooltipDiv);
-      this.set('_tooltipDiv', $tooltipDiv);
-
       // Add the grid lines.
-      g.append('g')
-       .attr('class', 'ev-grid main-x-grid')
-       .attr('transform', 'translate(0,' + _mainChartHeight + ')')
-       .call(xGrid);
+      this._addMainGrid(xGrid, yGrid, _mainChartHeight);
 
-      g.append('g')
-       .attr('class', 'ev-grid main-y-grid')
-       .call(yGrid);
+      // Add the main axes.
+      this._addMainAxes(xAxis, yAxis, _mainChartHeight);
 
-      // Add the axes.
-      g.append('g')
-       .attr('class', 'ev-axis main-x-axis')
-       .attr('transform', 'translate(0,' + _mainChartHeight + ')')
-       .call(xAxis);
-
-      g.append('g')
-       .attr('class', 'ev-axis main-y-axis')
-       .call(yAxis);
-
+      // Add the context x-axis.
       g.append('g')
        .attr('class', 'ev-axis context-x-axis')
        .attr('transform',
@@ -1176,25 +1210,7 @@ $(function() {
                                _contextChartHeight + contextMargins.top) + ')')
        .call(x2Axis);
 
-      // Add the clip path to hide the lines outside of the main window.
-      var clipPathId = elementId + '-clip-path';
-      g.append('clipPath')
-       .attr('id', clipPathId)
-       .append('rect')
-       .attr('width', _mainChartWidth)
-       .attr('height', _mainChartHeight);
-
-      // Add the chart lines.
-      g.append('g')
-       .attr('class', 'ev-chart-lines')
-       .selectAll('.ev-chart-line')
-       .data(_data)
-       .enter()
-        .append('path')
-        .attr('class', 'ev-chart-line')
-        .attr('clip-path', 'url(#' + clipPathId + ')')
-        .attr('d', lineFn)
-        .style('stroke', _colorFn);
+      this._addChartLines(_mainChartHeight, _mainChartWidth, _data, lineFn);
 
       g.append('g')
        .attr('class', 'ev-context-chart-lines')
@@ -1210,32 +1226,8 @@ $(function() {
        .style('stroke', _colorFn);
 
       if (showTooltip) {
-        // Add a circle for use with the tooltip.
-        tooltipCircle = g.append('circle')
-                         .attr('class', 'ev-tooltip-circle')
-                         .attr('cx', 0)
-                         .attr('cy', 0)
-                         .attr('r', 5);
-        this.set('_tooltipCircle', tooltipCircle);
-
-        _handleMouseClick = this.get('_handleMouseClick');
-        _handleMouseMove = this.get('_handleMouseMove');
-
-        // Add an invisible rectangle to detect mouse movements.
-        g.append('rect')
-         .attr('class', 'hover-rect')
-         .attr('width', _mainChartWidth)
-         .attr('height', _mainChartHeight)
-         .style('opacity', 0)
-         .on('mousemove', _handleMouseMove)
-         .on('click', _handleMouseClick)
-
-         // Hide the tooltip when the mouse leaves the hover rectangle.
-         .on('mouseout', function() {
-           $tooltipDiv.css('display', 'none');
-           tooltipCircle.style('display', 'none');
-         });
-
+        this._addTooltip();
+        this._addHoverRect(_mainChartHeight, _mainChartWidth);
       }
 
       // Taken from crossfilter (http://square.github.com/crossfilter/)
@@ -1307,16 +1299,15 @@ $(function() {
 
         xDomain = self._getXDomain(_data, brushExtent);
         yDomain = self._getYDomain(_data, brushExtent, true);
-
-
         xTickFormat = self._getTimeTickFormatFn(_data, xDomain);
-        xAxis = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat);
 
+        // Update the scales for the grid and axes.
         xScale.domain(xDomain);
         yScale.domain(yDomain);
-        g.select('.ev-chart-lines')
-         .selectAll('.ev-chart-line')
-         .attr('d', lineFn);
+
+        xAxis.tickFormat(xTickFormat);
+
+        // Redraw the grid, axes, and lines.
         g.select('.ev-grid.main-x-grid')
          .call(xGrid);
         g.select('.ev-grid.main-y-grid')
@@ -1325,9 +1316,14 @@ $(function() {
          .call(xAxis);
         g.select('.ev-axis.main-y-axis')
          .call(yAxis);
+        g.select('.ev-chart-lines')
+         .selectAll('.ev-chart-line')
+         .attr('d', lineFn);
 
         updateBrushBG();
 
+        // If we are showing a tooltip, we should recompute the point to pixel
+        // coordinates.
         if (showTooltip) {
           self._precomputePoints(_data, xScale, yScale);
         }
