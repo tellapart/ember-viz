@@ -345,7 +345,8 @@
 
         return {
           key: series.key,
-          values: valuesCopy
+          values: valuesCopy,
+          disabled: series.disabled
         };
       });
     }.property('data.[]', 'getX', 'getY'),
@@ -771,7 +772,8 @@
         var actualData = this.get('data');
         _data.forEach(function(elem, index) {
           var key = elem['key'],
-              color = _colorFn(elem, index),
+              normalColor = _colorFn(elem, index),
+              startingColor = (elem.disabled) ? 'white' : normalColor;
               div = legendDiv.append('div');
 
           var circle = div.append('svg')
@@ -779,7 +781,7 @@
             .attr('height', 12)
             .attr('width', 14)
           .append('circle')
-            .attr('fill', color)
+            .attr('fill', startingColor)
             .attr('stroke', 'black')
             .attr('cx', 6)
             .attr('cy', 6)
@@ -822,7 +824,7 @@
 
             legendDiv.selectAll('circle')
               .attr('fill', 'white');
-            circle.attr('fill', color);
+            circle.attr('fill', normalColor);
             clickCommon();
             window.setTimeout(function() { doubleclick = false; }, 800);
           });
@@ -831,11 +833,8 @@
               clickTimeoutId = window.setTimeout(function() {
                 if (!doubleclick) {
                   elem.disabled = (elem.disabled) ? false : true;
-                  if (elem.disabled) {
-                    circle.attr('fill', 'white');
-                  } else {
-                    circle.attr('fill', color);
-                  }
+                  var newColor = (elem.disabled) ? 'white' : normalColor;
+                  circle.attr('fill', newColor);
                   clickCommon();
                 }
                 clickTimeoutId = 0;
@@ -1080,7 +1079,8 @@ $(function() {
         var actualData = this.get('data');
         _data.forEach(function(elem, index) {
           var key = elem['key'],
-              color = _colorFn(elem, index),
+              normalColor = _colorFn(elem, index),
+              startingColor = (elem.disabled) ? 'white' : normalColor;
               div = legendDiv.append('div');
 
           var circle = div.append('svg')
@@ -1088,7 +1088,7 @@ $(function() {
             .attr('height', 12)
             .attr('width', 14)
           .append('circle')
-            .attr('fill', color)
+            .attr('fill', startingColor)
             .attr('stroke', 'black')
             .attr('cx', 6)
             .attr('cy', 6)
@@ -1112,7 +1112,7 @@ $(function() {
              .call(yAxis);
 
             g.selectAll('.ev-chart-line')
-             .attr('d', lineFn);
+             .attr('d', mainLineFn);
             self._precomputePoints(_data, xScale, yScale);
           }
           div.on('dblclick', function() {
@@ -1127,19 +1127,16 @@ $(function() {
 
             legendDiv.selectAll('circle')
               .attr('fill', 'white');
-            circle.attr('fill', color);
+            circle.attr('fill', normalColor);
             clickCommon();
           });
           div.on('click', function() {
             var disabledStatus = (elem.disabled) ? false : true;
-            elem.disabled = disabledStatus
+            elem.disabled = disabledStatus;
             actualData[index].disabled = disabledStatus;
 
-            if (elem.disabled) {
-              circle.attr('fill', 'white');
-            } else {
-              circle.attr('fill', color);
-            }
+            var newColor = (elem.disabled) ? 'white' : normalColor;
+            circle.attr('fill', newColor);
             clickCommon();
           });
         });
@@ -1186,7 +1183,8 @@ $(function() {
           .x(function(d) { return x2Scale(d.x); })
           .y(function(d) { return y2Scale(d.y); });
 
-      lineFn = this._getLineFn(line);
+      mainLineFn = this._getLineFn(line);
+      contextLineFn= this._getLineFn(line2);
 
       var brush = d3.svg.brush()
         .x(x2Scale)
@@ -1210,7 +1208,7 @@ $(function() {
                                _contextChartHeight + contextMargins.top) + ')')
        .call(x2Axis);
 
-      this._addChartLines(_mainChartHeight, _mainChartWidth, _data, lineFn);
+      this._addChartLines(_mainChartHeight, _mainChartWidth, _data, mainLineFn);
 
       g.append('g')
        .attr('class', 'ev-context-chart-lines')
@@ -1222,7 +1220,7 @@ $(function() {
        .attr('transform',
              'translate(0,' + (_mainChartHeight + margins.bottom +
                                contextMargins.top) + ')')
-       .attr('d', function(d) { return line2(d.values); })
+       .attr('d', contextLineFn)
        .style('stroke', _colorFn);
 
       if (showTooltip) {
@@ -1318,7 +1316,7 @@ $(function() {
          .call(yAxis);
         g.select('.ev-chart-lines')
          .selectAll('.ev-chart-line')
-         .attr('d', lineFn);
+         .attr('d', mainLineFn);
 
         updateBrushBG();
 
