@@ -348,7 +348,7 @@
           values: valuesCopy
         };
       });
-    }.property('data.[]'),
+    }.property('data.[]', 'getX', 'getY'),
 
     _precomputePoints: function(data, xScale, yScale) {
       var x,
