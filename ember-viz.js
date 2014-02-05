@@ -134,7 +134,7 @@
           heightRatio = this.get('defaultHeightRatio'),
           width = this.get('width');
 
-      if (height == 0) {
+      if (height === 0) {
         // The browser didn't determine a height for the div, so fall back to
         // a default height.
 
@@ -148,7 +148,7 @@
           $container = $('#' + elementId),
           width = $container.width();
 
-      if (width == 0) {
+      if (width === 0) {
         // The browser didn't determine a width for the div, so fall back to
         // a default width.
         return this.get('defaultWidth');
@@ -171,7 +171,7 @@
                '<hr />' +
                '<p>' + valueFormatFn(y) + ' at ' +
                timeFormatFn(new Date(x)) + '</p>';
-      }
+      };
     },
 
     _getLineFn: function(line) {
@@ -290,7 +290,7 @@
 
     _colorFn: function() {
       var colors = d3.scale.category20().range();
-      return function(d, i) { return d.color || colors[i % colors.length] };
+      return function(d, i) { return d.color || colors[i % colors.length]; };
     }.property(),
 
     _data: function() {
@@ -306,6 +306,11 @@
       if (typeof getY !== 'function') {
         throw 'Provided "getY" attribute is not a valid function. ' +
           SEE_DOCUMENTATION_MSG;
+      }
+
+      // Verify that the data attribute is valid and that it has a map function.
+      if (!data && typeof data.map === 'function') {
+        return [];
       }
 
       // Make a deep copy of data to avoid manipulating the controller's clean
@@ -364,7 +369,7 @@
           // cached scaling of the timestamp because each timestamp is probably
           // going to be repeated for each series. Y values are not as likely
           // to be repeated.
-          if (x == undefined) {
+          if (x === undefined) {
             x = xScale(elem.x);
             xCache[elem.x] = x;
           }
@@ -520,7 +525,7 @@
           $tooltipDiv.css('display', 'none');
           tooltipCircle.style('display', 'none');
         }
-      }
+      };
     }.property('_data', 'valueFormatFn', 'margins'),
 
     _handleMouseOut: function() {
@@ -534,7 +539,7 @@
         // Hide the tooltip circle.
         d3.select('#' + elementId + ' .ev-tooltip-circle')
           .style('display', 'none');
-      }
+      };
     }.property(),
 
     _handleMouseClick: function() {
@@ -771,7 +776,7 @@
         var legendDiv = d3.select('#' + elementId + ' .ev-legend');
         var actualData = this.get('data');
         _data.forEach(function(elem, index) {
-          var key = elem['key'],
+          var key = elem.key,
               normalColor = _colorFn(elem, index),
               startingColor = (elem.disabled) ? 'white' : normalColor;
               div = legendDiv.append('div');
@@ -1062,7 +1067,7 @@ $(function() {
       x2Domain = this._getX2Domain(_data);
       yDomain = this._getYDomain(_data, brushExtent, true);
       y2Domain = this._getYDomain(_data, null, false);
-      xTickFormat = this._getTimeTickFormatFn(_data, xDomain),
+      xTickFormat = this._getTimeTickFormatFn(_data, xDomain);
 
       this._addContainer();
 
@@ -1078,7 +1083,7 @@ $(function() {
         var legendDiv = d3.select('#' + elementId + ' .ev-legend');
         var actualData = this.get('data');
         _data.forEach(function(elem, index) {
-          var key = elem['key'],
+          var key = elem.key,
               normalColor = _colorFn(elem, index),
               startingColor = (elem.disabled) ? 'white' : normalColor;
               div = legendDiv.append('div');
@@ -1233,15 +1238,15 @@ $(function() {
         var e = +(d == 'e'),
             x = e ? 1 : -1,
             y = _contextChartHeight / 3;
-        return 'M' + (.5 * x) + ',' + y
-            + 'A6,6 0 0 ' + e + ' ' + (6.5 * x) + ',' + (y + 6)
-            + 'V' + (2 * y - 6)
-            + 'A6,6 0 0 ' + e + ' ' + (.5 * x) + ',' + (2 * y)
-            + 'Z'
-            + 'M' + (2.5 * x) + ',' + (y + 8)
-            + 'V' + (2 * y - 8)
-            + 'M' + (4.5 * x) + ',' + (y + 8)
-            + 'V' + (2 * y - 8);
+        return 'M' + (0.5 * x) + ',' + y +
+          'A6,6 0 0 ' + e + ' ' + (6.5 * x) + ',' + (y + 6) +
+          'V' + (2 * y - 6) +
+          'A6,6 0 0 ' + e + ' ' + (0.5 * x) + ',' + (2 * y) +
+          'Z'+
+          'M' + (2.5 * x) + ',' + (y + 8) +
+          'V' + (2 * y - 8) +
+          'M' + (4.5 * x) + ',' + (y + 8) +
+          'V' + (2 * y - 8);
       }
 
       contextG = g.append('g')
