@@ -309,7 +309,7 @@
       }
 
       // Verify that the data attribute is valid and that it has a map function.
-      if (!data && typeof data.map === 'function') {
+      if (!data || typeof data.map != 'function') {
         return [];
       }
 
