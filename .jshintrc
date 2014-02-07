@@ -1,0 +1,23 @@
+{
+  "predef": [
+    "$",
+    "d3",
+    "Ember",
+    "window"
+  ],
+
+  "curly": true,
+  "eqeqeq": true,
+  "eqnull": true,
+  "esnext": true,
+  "freeze": true,
+  "indent": 2,
+  "latedef": true,
+  "maxlen": 120,
+  "newcap": true,
+  "noarg": true,
+  "noempty": true,
+  "trailing": true,
+  "undef": true,
+  "unused": true
+}

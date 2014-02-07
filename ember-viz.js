@@ -8,15 +8,15 @@
       var enabledSeries = seriesArray.rejectBy('disabled');
       var minValue = d3.min(enabledSeries,
                         function(d) {
-                          return d3.min(d.values, accessFunction); }),
+                          return d3.min(d.values, accessFunction);
+                        }),
           maxValue = d3.max(enabledSeries,
                         function(d) {
-                          return d3.max(d.values, accessFunction); });
-
+                          return d3.max(d.values, accessFunction);
+                        });
       return [minValue, maxValue];
     },
     overrideDomain: function(range, newRange) {
-
       if (newRange !== undefined && newRange !== null) {
         if (!isNaN(newRange[0])) {
           range[0] = newRange[0];
@@ -25,26 +25,11 @@
           range[1] = newRange[1];
         }
       }
-
       return range;
     },
-    makeXAxisElement: function(scale, format) {
-      return d3.svg.axis()
-               .scale(scale)
-               .orient('bottom')
-               .tickFormat(format)
-               .ticks(7);
-    },
-    makeYAxisElement: function(scale, format) {
-      return d3.svg.axis()
-               .scale(scale)
-               .orient('left')
-               .tickFormat(format);
-    },
     arePointsEqual: function(p1, p2) {
-      return p1 && p2 && p1.x == p2.x && p1.y == p2.y;
+      return p1 && p2 && p1.x === p2.x && p1.y === p2.y;
     }
-
   });
 })();
 
@@ -55,8 +40,8 @@
     ' EmberViz usage details.';
 
   /*
-   * Basic chart view to display a chart with no manipulation of the provided
-   * data.
+   * Basic chart view to display a chart with no tools to manipulate the graph
+   * other than a legend.
    */
   Ember.EmberViz.LineChartComponent = Ember.Component.extend({
 
@@ -96,8 +81,10 @@
     tooltipContentFn: null,
     timeFormatter: d3.time.format.utc,
 
-    // Scales need to be computed properties so that multiple charts on a page
-    // don't share the created scale.
+    valueFormatFn: d3.format(''),
+    valueTickFormatFn: d3.format('.2s'),
+
+    // Scales and axes need to be computed properties so that multiple charts on a page don't share the created scale.
     xScale: function() {
       return d3.time.scale.utc();
     }.property(),
@@ -106,9 +93,29 @@
       return d3.scale.linear();
     }.property(),
 
+    xAxis: function() {
+      return d3.svg.axis()
+        .orient('bottom')
+        .ticks(7);
+    }.property(),
 
-    valueFormatFn: d3.format(''),
-    valueTickFormatFn: d3.format('.2s'),
+    yAxis: function() {
+      return d3.svg.axis()
+        .orient('left');
+    }.property(),
+
+    xGrid: function() {
+      return d3.svg.axis()
+        .orient('bottom')
+        .ticks(7)
+        .tickFormat('');
+    }.property(),
+
+    yGrid: function() {
+      return d3.svg.axis()
+        .orient('left')
+        .tickFormat('');
+    }.property(),
 
     initialize: function() {
       this.applyUserOptions();
@@ -164,7 +171,9 @@
       var tooltipContentFn = this.get('tooltipContentFn');
 
       // If the user provided a tooltip content function, return it.
-      if (tooltipContentFn) return tooltipContentFn;
+      if (tooltipContentFn) {
+        return tooltipContentFn;
+      }
 
       return function(x, y, elem, seriesName) {
         return '<h5>' + seriesName + '</h5>' +
@@ -182,7 +191,6 @@
           return line(d.values);
         }
       };
-
     },
 
     _getTimeFormatFn: function(data) {
@@ -191,7 +199,9 @@
           avgGranularity = this._getAverageGranularity(data);
 
       // If the user provided a time format function, return it.
-      if (timeFormatFn) return timeFormatFn;
+      if (timeFormatFn) {
+        return timeFormatFn;
+      }
 
       // If the average granularity is around or greater than one point per day,
       // only show month and date.
@@ -240,35 +250,29 @@
 
       // In the scope of less than a day, show the time without the date.
       return timeFormatter('%H:%M');
-
     },
+
     _getXDomain: function(data) {
       var domain = Ember.EmberViz.Helpers.getDomain(data,
                                                    function(d) { return d.x; });
-
       return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
-
     },
 
     _getYDomain: function(data) {
       var domain = Ember.EmberViz.Helpers.getDomain(data,
                                                    function(d) { return d.y; });
-
       return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceY'));
-
     },
 
     _mainChartHeight: function() {
       var height = this.get('height'),
           margins = this.get('margins');
-
       return height - margins.top - margins.bottom;
     }.property('height'),
 
     _mainChartWidth: function() {
       var width = this.get('width'),
           margins = this.get('margins');
-
       return width - margins.right - margins.left;
     }.property('width'),
 
@@ -284,7 +288,6 @@
           total += x1 - x0;
         }
       });
-
       return total / count;
     },
 
@@ -309,7 +312,7 @@
       }
 
       // Verify that the data attribute is valid and that it has a map function.
-      if (!data || typeof data.map != 'function') {
+      if (!data || typeof data.map !== 'function') {
         return [];
       }
 
@@ -338,8 +341,12 @@
           }
 
           // Verify that the extracted values are actually numbers.
-          if (isNaN(x)) throw xError;
-          if (isNaN(y)) throw yError;
+          if (isNaN(x)) {
+            throw xError;
+          }
+          if (isNaN(y)) {
+            throw yError;
+          }
 
           return {
             x: x,
@@ -354,21 +361,27 @@
           disabled: series.disabled
         };
       });
+
+      // TODO: Reset brushExtent if it exists and no longer fits the data array.
+
     }.property('data.[]', 'getX', 'getY'),
 
-    _precomputePoints: function(data, xScale, yScale) {
+    _precomputePointLocations: function() {
       var x,
-          xCache = {};
+          xCache = {},
+          data = this.get('_data'),
+          xScale = this.get('xScale'),
+          yScale = this.get('yScale');
 
       data.forEach(function(series) {
 
         series.values.forEach(function(elem) {
-          x = xCache[elem.x];
 
           // Cache the scaled timestamps. It's only efficient to store the
           // cached scaling of the timestamp because each timestamp is probably
           // going to be repeated for each series. Y values are not as likely
           // to be repeated.
+          x = xCache[elem.x];
           if (x === undefined) {
             x = xScale(elem.x);
             xCache[elem.x] = x;
@@ -380,7 +393,7 @@
       });
     },
 
-    _findClosestPoint: function(data, xPosition, yPosition, maxPixels) {
+    _findClosestPoint: function(data, xPosition, yPosition) {
       var closestPoint,
           seriesName,
           curDistSq,
@@ -394,17 +407,23 @@
 
       data.forEach(function(series) {
 
-        if (series.disabled) return;
+        if (series.disabled) {
+          return;
+        }
 
         series.values.forEach(function(elem) {
 
           // Check that the x value is within range.
           xDist = elem.xPx - xPosition;
-          if (xDist > searchRadius || xDist < -1 * searchRadius) return;
+          if (xDist > searchRadius || xDist < -1 * searchRadius) {
+            return;
+          }
 
           // Check that the y value is within range.
           yDist = elem.yPx - yPosition;
-          if (yDist > searchRadius || yDist < -1 * searchRadius) return;
+          if (yDist > searchRadius || yDist < -1 * searchRadius) {
+            return;
+          }
 
           // Check if the proxy distance (distance squared, so as to avoid
           // unnecessary computation time for the square root) is closer than
@@ -417,20 +436,23 @@
           }
         });
       });
-      if (!closestPoint) return null;
+      if (!closestPoint) {
+        return null;
+      }
       return {
         point: closestPoint,
         seriesName: seriesName
       };
     },
+
     _handleMouseMove: function() {
       var prevClosestPoint,
           self = this,
-          _data = this.get('_data'),
+          data = this.get('_data'),
           margins = this.get('margins'),
           elementId = this.get('elementId'),
           valueFormatFn = this.get('valueFormatFn'),
-          timeFormatFn = this._getTimeFormatFn(_data),
+          timeFormatFn = this._getTimeFormatFn(data),
           tooltipContentFn = this._getTooltipContentFn(valueFormatFn,
                                                        timeFormatFn),
           bodyWidth = $('body').width();
@@ -448,8 +470,8 @@
             yPosition = position[1],
             $tooltipDiv = $('#' + elementId + ' .ev-chart-tooltip'),
             tooltipCircle = d3.select('#' + elementId + ' .ev-tooltip-circle'),
-            closestPointInfo = self._findClosestPoint(_data, xPosition,
-                                                      yPosition);
+            closestPointInfo = self._findClosestPoint(data, xPosition,
+                                                      yPosition),
             userMouseMove = self.get('onMouseMove');
 
         // If a closest point was found inside the appropriate radius,
@@ -479,7 +501,6 @@
             $tooltipDiv.css('left', newLeft - widthPastWindow);
           }
 
-
           // If the closest point is different this time, reset the
           // tooltipCircle in preparation for the transition animation.
           if (!Ember.EmberViz.Helpers.arePointsEqual(closestPoint,
@@ -502,23 +523,24 @@
               return d3.interpolate(a, 0.8);
             });
 
-            if (userMouseMove) {
-              if (closestPoint) {
-                closestPointPosition = {
-                  x: closestPoint.xPx,
-                  y: closestPoint.yPx
-                };
-                closestPointValues = {
-                  x: closestPoint.x,
-                  y: closestPoint.y};
-              }
-              userMouseMove(
-                {x: position[0], y: position[1]},
-                closestPointPosition,
-                closestPointValues);
+          if (userMouseMove) {
+            if (closestPoint) {
+              closestPointPosition = {
+                x: closestPoint.xPx,
+                y: closestPoint.yPx
+              };
+              closestPointValues = {
+                x: closestPoint.x,
+                y: closestPoint.y
+              };
             }
+            userMouseMove(
+              {x: position[0], y: position[1]},
+              closestPointPosition,
+              closestPointValues);
+          }
 
-            prevClosestPoint = closestPoint;
+          prevClosestPoint = closestPoint;
         } else {
           prevClosestPoint = null;
           // Hide the tooltip
@@ -544,23 +566,22 @@
 
     _handleMouseClick: function() {
       var self = this,
-          _data = this.get('_data'),
-          margins = this.get('margins'),
+          data = this.get('_data'),
           userOnClick = this.get('onClick');
 
       return function() {
-        var html,
+        var clickPosition,
             closestPoint,
             position = d3.mouse(this),
             xPosition = position[0],
             yPosition = position[1],
-            clickPosition = {
-              x: position[0],
-              y: position[1]
-            },
-            closestPointInfo = self._findClosestPoint(_data, xPosition,
+            closestPointInfo = self._findClosestPoint(data, xPosition,
                                                       yPosition);
 
+        clickPosition = {
+          x: position[0],
+          y: position[1]
+        };
         // If a closest point was found inside the appropriate radius, pass the
         // location and data to the user provided callback;
         if (userOnClick) {
@@ -574,24 +595,23 @@
           }
         }
       };
-
-    }.property('onClick'),
+    }.property('onClick', '_data', 'margins'),
 
     didInsertElement: function() {
       var self = this;
 
-      this.notifyPropertyChange('height');
-      this.notifyPropertyChange('width');
-      this.set('shouldRender', true);
-      this._render();
-
-      // Re-render the chart when the window is resized.
-      $(window).resize(function() {
+      function resize() {
         self.notifyPropertyChange('height');
         self.notifyPropertyChange('width');
         self._render();
-      });
+      }
+
+      // Re-render the chart when the window is resized.
+      $(window).resize(resize);
+      this.set('shouldRender', true);
+      resize();
     },
+
     _addContainer: function() {
       var elementId = this.get('elementId'),
           width = this.get('width'),
@@ -610,6 +630,7 @@
               'translate(' + margins.left + ',' + margins.top + ')');
 
     },
+
     _addLegend: function() {
       var elementId = this.get('elementId'),
           legendHeight = this.get('legendHeight'),
@@ -624,6 +645,7 @@
 
       $container.append($legendDiv);
     },
+
     _addTooltip: function() {
       var elementId = this.get('elementId'),
           $container = $('#' + elementId);
@@ -640,6 +662,7 @@
         .attr('cy', 0)
         .attr('r', 5);
     },
+
     _addHoverRect: function(height, width) {
       var elementId = this.get('elementId'),
           _handleMouseClick = this.get('_handleMouseClick'),
@@ -656,8 +679,29 @@
         .on('mousemove', _handleMouseMove)
         .on('click', _handleMouseClick)
         .on('mouseout', _handleMouseOut);
-
     },
+
+    _addContextLines: function(mainHeight, data, contextLineFn) {
+      var elementId = this.get('elementId'),
+          g = d3.select('#' + elementId + ' .ev-main'),
+          colorFn = this.get('_colorFn'),
+          margins = this.get('margins'),
+          contextMargins = this.get('contextMargins');
+
+      g.append('g')
+       .attr('class', 'ev-context-chart-lines')
+       .selectAll('.ev-context-chart-line')
+       .data(data)
+      .enter()
+       .append('path')
+       .attr('class', 'ev-context-chart-line')
+       .attr('transform',
+             'translate(0,' + (mainHeight + margins.bottom +
+                               contextMargins.top) + ')')
+       .attr('d', contextLineFn)
+       .style('stroke', colorFn);
+    },
+
     _addChartLines: function(height, width, data, lineFn) {
       // Add the clip path to hide the lines outside of the main window.
       var elementId = this.get('elementId'),
@@ -683,9 +727,12 @@
         .attr('d', lineFn)
         .style('stroke', colorFn);
     },
-    _addMainAxes: function(xAxis, yAxis, height) {
+
+    _addMainAxes: function(height) {
       var elementId = this.get('elementId'),
-          g = d3.select('#' + elementId + ' .ev-main');
+          g = d3.select('#' + elementId + ' .ev-main'),
+          xAxis = this.get('xAxis'),
+          yAxis = this.get('yAxis');
 
       g.append('g')
        .attr('class', 'ev-axis main-x-axis')
@@ -696,9 +743,12 @@
        .attr('class', 'ev-axis main-y-axis')
        .call(yAxis);
     },
-    _addMainGrid: function(xGrid, yGrid, height) {
+
+    _addMainGrid: function(height) {
       var elementId = this.get('elementId'),
-          g = d3.select('#' + elementId + ' .ev-main');
+          g = d3.select('#' + elementId + ' .ev-main'),
+          xGrid = this.get('xGrid'),
+          yGrid = this.get('yGrid');
 
       g.append('g')
          .attr('class', 'ev-grid main-y-grid')
@@ -709,58 +759,60 @@
          .attr('transform', 'translate(0,' + height + ')')
          .call(xGrid);
     },
+
     _render: function() {
       var shouldRender = this.get('shouldRender');
-      if (!shouldRender) return;
+      if (!shouldRender) {
+        return;
+      }
 
-      var line,
-          lineFn,
-          g,
+      var g,
           svg,
-          xAxis,
-          yAxis,
-          xGrid,
-          yGrid,
           xDomain,
           yDomain,
-          xTickFormat,
-          _colorFn = this.get('_colorFn'),
-          _data = this.get('_data'),
-          _mainChartHeight = this.get('_mainChartHeight'),
-          _mainChartWidth = this.get('_mainChartWidth'),
+          timeTickFormatFn,
+
+          self = this,
 
           elementId = this.get('elementId'),
           $container = $('#' + elementId),
 
-          height = this.get('height'),
-          width = this.get('width'),
+          data = this.get('_data'),
+          userData = this.get('data'),
 
-          legendHeight = this.get('legendHeight'),
+          height = this.get('height'),
+          _mainChartHeight = this.get('_mainChartHeight'),
+          _mainChartWidth = this.get('_mainChartWidth'),
+
           lineType = this.get('lineType'),
-          margins = this.get('margins'),
-          legendMargins = this.get('legendMargins'),
-          self = this,
+          line = lineType(),
+          lineFn = this._getLineFn(line),
+
           showLegend = this.get('showLegend'),
           showTooltip = this.get('showTooltip'),
-          valueFormatFn = this.get('valueFormatFn'),
+
           xScale = this.get('xScale'),
           yScale = this.get('yScale'),
-          yTickFormat = this.get('valueTickFormatFn'),
+          xAxis = this.get('xAxis'),
+          yAxis = this.get('yAxis'),
+          xGrid = this.get('xGrid'),
+          yGrid = this.get('yGrid'),
+
+          valueTickFormatFn = this.get('valueTickFormatFn'),
+          colorFn = this.get('_colorFn'),
 
           userOnRender = this.get('onRender');
 
       // Clear the div.
       $container.empty();
 
-      if (Ember.isEmpty(_data)) {
-
-        // TODO: Show some indication that there is no data.
+      if (Ember.isEmpty(data)) {
         return;
       }
 
-      xDomain = this._getXDomain(_data);
-      yDomain = this._getYDomain(_data);
-      xTickFormat = this._getTimeTickFormatFn(_data, xDomain);
+      xDomain = this._getXDomain(data);
+      yDomain = this._getYDomain(data);
+      timeTickFormatFn = this._getTimeTickFormatFn(data, xDomain);
 
       this._addContainer();
       svg = d3.select('#' + elementId + ' svg');
@@ -774,11 +826,10 @@
         // jQuery can't add the svg and circle elements correctly, so switch to
         // using d3.
         var legendDiv = d3.select('#' + elementId + ' .ev-legend');
-        var actualData = this.get('data');
-        _data.forEach(function(elem, index) {
+        data.forEach(function(elem, index) {
           var key = elem.key,
-              normalColor = _colorFn(elem, index),
-              startingColor = (elem.disabled) ? 'white' : normalColor;
+              normalColor = colorFn(elem, index),
+              startingColor = (elem.disabled) ? 'white' : normalColor,
               div = legendDiv.append('div');
 
           var circle = div.append('svg')
@@ -796,8 +847,8 @@
             .text(key + ' ');
 
           function clickCommon() {
-            var yDomain = self._getYDomain(_data);
-            var xDomain = self._getXDomain(_data);
+            yDomain = self._getYDomain(data);
+            xDomain = self._getXDomain(data);
 
             xScale.domain(xDomain);
             yScale.domain(yDomain);
@@ -811,7 +862,7 @@
 
             g.selectAll('.ev-chart-line')
              .attr('d', lineFn);
-            self._precomputePoints(_data, xScale, yScale);
+            self._precomputePointLocations();
           }
           var clickTimeoutId = 0,
               doubleclick = false;
@@ -820,11 +871,11 @@
 
             // Communicate the disabled status of each element back to the
             // original data array.
-            actualData.setEach('disabled', true);
-            actualData[index].disabled = false;
+            userData.setEach('disabled', true);
+            userData[index].disabled = false;
 
             // Record the disabled status of each element in the internal array.
-            _data.setEach('disabled', true);
+            data.setEach('disabled', true);
             elem.disabled = false;
 
             legendDiv.selectAll('circle')
@@ -855,36 +906,45 @@
         yScale.range([_mainChartHeight, 0]);
       }
 
+      /******************************
+       * Set up all the components. *
+       ******************************/
+
+      // Scales
       xScale
         .domain(xDomain)
         .range([0, _mainChartWidth]);
-
       yScale
         .domain(yDomain)
         .range([_mainChartHeight, 0]);
 
-      line = lineType()
-          .x(function(d) { return xScale(d.x); })
-          .y(function(d) { return yScale(d.y); });
+      // Line function.
+      line
+        .x(function(d) { return xScale(d.x); })
+        .y(function(d) { return yScale(d.y); });
 
-      lineFn = this._getLineFn(line);
+      // Grid lines (d3 axis with modified tick marks)
+      xGrid
+        .scale(xScale)
+        .tickSize(-1 * _mainChartHeight, 0, 0);
+      yGrid
+        .scale(yScale)
+        .tickSize(-1 * _mainChartWidth, 0, 0);
 
-      // Create and add the grid lines.
-      xGrid = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat)
-        .tickSize(-1 * _mainChartHeight, 0, 0)
-        .tickFormat('');
-      yGrid = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat)
-        .tickSize(-1 * _mainChartWidth, 0, 0)
-        .tickFormat('');
+      // Axes
+      xAxis
+        .scale(xScale)
+        .tickFormat(timeTickFormatFn);
+      yAxis
+        .scale(yScale)
+        .tickFormat(valueTickFormatFn);
 
-      this._addMainGrid(xGrid, yGrid, _mainChartHeight);
-
-      // Create and add the axes.
-      xAxis = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat);
-      yAxis = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat);
-      this._addMainAxes(xAxis, yAxis, _mainChartHeight);
-
-      this._addChartLines(_mainChartHeight, _mainChartWidth, _data, lineFn);
+      /************************
+       * Build the actual UI. *
+       ************************/
+      this._addMainGrid(_mainChartHeight);
+      this._addMainAxes(_mainChartHeight);
+      this._addChartLines(_mainChartHeight, _mainChartWidth, data, lineFn);
 
       if (showTooltip) {
         this._addTooltip();
@@ -892,14 +952,13 @@
 
         // Precompute the pixel locations of all the points, but only after the
         // rest of the chart is rendered.
-        this._precomputePoints(_data, xScale, yScale);
+        this._precomputePointLocations();
       }
 
+      // If the user supplied an onRender callback, call it.
       if (userOnRender) {
         userOnRender();
       }
-
-      // TODO: Allow the developer to bind event handlers. (onclick, etc.)
     }.observes('_data')
   });
 
@@ -930,6 +989,12 @@ $(function() {
       return d3.scale.linear();
     }.property(),
 
+    x2Axis: function() {
+      return d3.svg.axis()
+        .orient('bottom')
+        .ticks(7);
+    }.property(),
+
     /***************************************************************************
      * Private variables and functions that should not be overwritten.
      **************************************************************************/
@@ -955,6 +1020,7 @@ $(function() {
     },
 
     _getYDomain: function(data, brushExtent, overrideDomain) {
+      var domain;
 
       // If there is a brushExtent, we should restrict the y domain to the
       // points within the brushExtent timespan.
@@ -967,8 +1033,12 @@ $(function() {
           series.values.forEach(function(point) {
 
             if (point.x >= brushExtent[0] && point.x <= brushExtent[1]) {
-              if (minValue === null || point.y < minValue) minValue = point.y;
-              if (maxValue === null || point.y > maxValue) maxValue = point.y;
+              if (minValue === null || point.y < minValue) {
+                minValue = point.y;
+              }
+              if (maxValue === null || point.y > maxValue) {
+                maxValue = point.y;
+              }
             }
           });
         });
@@ -1007,9 +1077,29 @@ $(function() {
       return height - contextHeight - margins.top - margins.bottom;
     }.property('height', 'contextHeight', 'margins'),
 
+    _addContextAxis: function(mainChartHeight, contextChartHeight) {
+      var elementId = this.get('elementId'),
+          g = d3.select('#' + elementId + ' .ev-main'),
+          x2Axis = this.get('x2Axis'),
+          margins = this.get('margins'),
+          contextMargins = this.get('contextMargins');
+
+      // Add the context x-axis.
+      g.append('g')
+       .attr('class', 'ev-axis context-x-axis')
+       .attr('transform',
+             'translate(0,' + (mainChartHeight + margins.bottom +
+                               contextChartHeight + contextMargins.top) + ')')
+       .call(x2Axis);
+
+    },
+
     _render: function() {
       var shouldRender = this.get('shouldRender');
-      if (!shouldRender) return;
+
+      if (!shouldRender) {
+        return;
+      }
 
       var g,
           svg,
@@ -1017,39 +1107,57 @@ $(function() {
           brushBG,
           brushBGenter,
           gBrush,
-          lineFn,
+
           xDomain,
-          x2Domain,
           yDomain,
-          _colorFn = this.get('_colorFn'),
-          _data = this.get('_data'),
+
+          x2Domain,
+          y2Domain,
+
+          self = this,
+
+          elementId = this.get('elementId'),
+          $container = $('#' + elementId),
+
+          data = this.get('_data'),
+          userData = this.get('data'),
+
+          height = this.get('height'),
           _mainChartHeight = this.get('_mainChartHeight'),
           _contextChartHeight = this.get('_contextChartHeight'),
           _mainChartWidth = this.get('_mainChartWidth'),
           _contextChartWidth = this.get('_contextChartWidth'),
 
-          elementId = this.get('elementId'),
-          $container = $('#' + elementId),
-
-          height = this.get('height'),
-          width = this.get('width'),
-
-          brushExtent = this.get('brushExtent'),
-          legendHeight = this.get('legendHeight'),
           lineType = this.get('lineType'),
+          mainLine = lineType(),
+          contextLine = lineType(),
+          mainLineFn = this._getLineFn(mainLine),
+          contextLineFn= this._getLineFn(contextLine),
+
           margins = this.get('margins'),
           contextMargins = this.get('contextMargins'),
-          legendMargins = this.get('legendMargins'),
           showLegend = this.get('showLegend'),
           showTooltip = this.get('showTooltip'),
-          self = this,
-          valueFormatFn = this.get('valueFormatFn'),
+
           xScale = this.get('xScale'),
           x2Scale = this.get('x2Scale'),
-          xTickFormat = this.get('timeTickFormatFn'),
-          yTickFormat = this.get('valueTickFormatFn'),
+
           yScale = this.get('yScale'),
           y2Scale = this.get('y2Scale'),
+
+          xAxis = this.get('xAxis'),
+          yAxis = this.get('yAxis'),
+          x2Axis = this.get('x2Axis'),
+
+          xGrid = this.get('xGrid'),
+          yGrid = this.get('yGrid'),
+
+          brush = d3.svg.brush(),
+          brushExtent = this.get('brushExtent'),
+
+          timeTickFormatFn = this.get('timeTickFormatFn'),
+          valueTickFormatFn = this.get('valueTickFormatFn'),
+          colorFn = this.get('_colorFn'),
 
           userOnBrush = this.get('onBrush'),
           userOnRender = this.get('onRender');
@@ -1057,17 +1165,16 @@ $(function() {
       // Clear the div.
       $container.empty();
 
-      if (Ember.isEmpty(_data)) {
-
-        // TODO: Show some indication that there is no data.
+      if (Ember.isEmpty(data)) {
         return;
       }
 
-      xDomain = this._getXDomain(_data, brushExtent);
-      x2Domain = this._getX2Domain(_data);
-      yDomain = this._getYDomain(_data, brushExtent, true);
-      y2Domain = this._getYDomain(_data, null, false);
-      xTickFormat = this._getTimeTickFormatFn(_data, xDomain);
+      xDomain = this._getXDomain(data, brushExtent);
+      x2Domain = this._getX2Domain(data);
+      yDomain = this._getYDomain(data, brushExtent, true);
+      y2Domain = this._getYDomain(data, null, false);
+
+      timeTickFormatFn = this._getTimeTickFormatFn(data, xDomain);
 
       this._addContainer();
 
@@ -1081,11 +1188,10 @@ $(function() {
         // jQuery can't add the svg and circle elements correctly, so switch to
         // using d3.
         var legendDiv = d3.select('#' + elementId + ' .ev-legend');
-        var actualData = this.get('data');
-        _data.forEach(function(elem, index) {
+        data.forEach(function(elem, index) {
           var key = elem.key,
-              normalColor = _colorFn(elem, index),
-              startingColor = (elem.disabled) ? 'white' : normalColor;
+              normalColor = colorFn(elem, index),
+              startingColor = (elem.disabled) ? 'white' : normalColor,
               div = legendDiv.append('div');
 
           var circle = div.append('svg')
@@ -1103,8 +1209,8 @@ $(function() {
             .text(key + ' ');
 
           function clickCommon() {
-            var yDomain = self._getYDomain(_data, brushExtent, true);
-            var xDomain = self._getXDomain(_data, brushExtent);
+            yDomain = self._getYDomain(data, brushExtent, true);
+            xDomain = self._getXDomain(data, brushExtent);
 
             xScale.domain(xDomain);
             yScale.domain(yDomain);
@@ -1118,16 +1224,16 @@ $(function() {
 
             g.selectAll('.ev-chart-line')
              .attr('d', mainLineFn);
-            self._precomputePoints(_data, xScale, yScale);
+            self._precomputePointLocations();
           }
           div.on('dblclick', function() {
             // Communicate the disabled status of each element back to the
             // original data array.
-            actualData.setEach('disabled', true);
-            actualData[index].disabled = false;
+            userData.setEach('disabled', true);
+            userData[index].disabled = false;
 
             // Record the disabled status of each element in the internal array.
-            _data.setEach('disabled', true);
+            data.setEach('disabled', true);
             elem.disabled = false;
 
             legendDiv.selectAll('circle')
@@ -1138,7 +1244,7 @@ $(function() {
           div.on('click', function() {
             var disabledStatus = (elem.disabled) ? false : true;
             elem.disabled = disabledStatus;
-            actualData[index].disabled = disabledStatus;
+            userData[index].disabled = disabledStatus;
 
             var newColor = (elem.disabled) ? 'white' : normalColor;
             circle.attr('fill', newColor);
@@ -1151,6 +1257,84 @@ $(function() {
         svg.attr('height', newHeight);
         _mainChartHeight -= $legendDiv.outerHeight();
         yScale.range([_mainChartHeight, 0]);
+      }
+
+      /******************************
+       * Set up all the components. *
+       ******************************/
+
+      function updateBrushBG() {
+        if (!brush.empty()) {
+          brush.extent(brushExtent);
+        }
+        brushBG
+          .data([brush.empty() ? x2Scale.domain() : brushExtent])
+          .each(function(d) {
+            var leftWidth = x2Scale(d[0]) - x2Scale.range()[0],
+                rightWidth = x2Scale.range()[1] - x2Scale(d[1]);
+            d3.select(this).select('.left')
+              .attr('width', leftWidth < 0 ? 0 : leftWidth);
+
+            d3.select(this).select('.right')
+              .attr('x', x2Scale(d[1]))
+              .attr('width', rightWidth < 0 ? 0 : rightWidth);
+          });
+      }
+
+      function onBrush() {
+        brushExtent = brush.empty() ? null : brush.extent();
+
+        xDomain = self._getXDomain(data, brushExtent);
+        yDomain = self._getYDomain(data, brushExtent, true);
+        timeTickFormatFn = self._getTimeTickFormatFn(data, xDomain);
+
+        // Update the scales for the grid and axes.
+        xScale.domain(xDomain);
+        yScale.domain(yDomain);
+
+        xAxis.tickFormat(timeTickFormatFn);
+
+        // Redraw the grid, axes, and lines.
+        g.select('.ev-grid.main-x-grid')
+         .call(xGrid);
+        g.select('.ev-grid.main-y-grid')
+         .call(yGrid);
+        g.select('.ev-axis.main-x-axis')
+         .call(xAxis);
+        g.select('.ev-axis.main-y-axis')
+         .call(yAxis);
+        g.select('.ev-chart-lines')
+         .selectAll('.ev-chart-line')
+         .attr('d', mainLineFn);
+
+        updateBrushBG();
+
+        // If we are showing a tooltip, we should recompute the point to pixel
+        // coordinates.
+        if (showTooltip) {
+          self._precomputePointLocations();
+        }
+
+        // If the user supplied an onbrush callback, call it.
+        if (userOnBrush) {
+          userOnBrush(brushExtent);
+        }
+      }
+
+      // Taken from crossfilter (http://square.github.com/crossfilter/)
+      function resizePath(d) {
+        var e = +(d === 'e'),
+            x = e ? 1 : -1,
+            y = _contextChartHeight / 3;
+        return 'M' + (0.5 * x) + ',' + y +
+          'A6,6 0 0 ' + e + ' ' + (6.5 * x) + ',' + (y + 6) +
+          'V' + (2 * y - 6) +
+          'A6,6 0 0 ' + e + ' ' + (0.5 * x) + ',' + (2 * y) +
+          'Z'+
+          'M' + (2.5 * x) + ',' + (y + 8) +
+          'V' + (2 * y - 8) +
+          'M' + (4.5 * x) + ',' + (y + 8) +
+          'V' + (2 * y - 8);
       }
 
       xScale
@@ -1169,29 +1353,32 @@ $(function() {
         .domain(y2Domain)
         .range([_contextChartHeight, 0]);
 
-      xGrid = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat)
-        .tickSize(-1 * _mainChartHeight, 0, 0)
-        .tickFormat('');
-      yGrid = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat)
-        .tickSize(-1 * _mainChartWidth, 0, 0)
-        .tickFormat('');
+      xGrid
+        .scale(xScale)
+        .tickSize(-1 * _mainChartHeight, 0, 0);
+      yGrid
+        .scale(yScale)
+        .tickSize(-1 * _mainChartWidth, 0, 0);
 
+      xAxis
+        .scale(xScale)
+        .tickFormat(timeTickFormatFn);
+      yAxis
+        .scale(yScale)
+        .tickFormat(valueTickFormatFn);
+      x2Axis
+        .scale(x2Scale)
+        .tickFormat(timeTickFormatFn);
 
-      xAxis = Ember.EmberViz.Helpers.makeXAxisElement(xScale, xTickFormat);
-      yAxis = Ember.EmberViz.Helpers.makeYAxisElement(yScale, yTickFormat);
-      x2Axis = Ember.EmberViz.Helpers.makeXAxisElement(x2Scale, xTickFormat);
+      mainLine
+        .x(function(d) { return xScale(d.x); })
+        .y(function(d) { return yScale(d.y); });
+      contextLine
+        .x(function(d) { return x2Scale(d.x); })
+        .y(function(d) { return y2Scale(d.y); });
 
-      line = lineType()
-          .x(function(d) { return xScale(d.x); })
-          .y(function(d) { return yScale(d.y); });
-      line2 = lineType()
-          .x(function(d) { return x2Scale(d.x); })
-          .y(function(d) { return y2Scale(d.y); });
-
-      mainLineFn = this._getLineFn(line);
-      contextLineFn= this._getLineFn(line2);
-
-      var brush = d3.svg.brush()
+      // Set up the brush.
+      brush
         .x(x2Scale)
         .on('brush', onBrush);
 
@@ -1199,54 +1386,19 @@ $(function() {
         brush.extent(brushExtent);
       }
 
-      // Add the grid lines.
-      this._addMainGrid(xGrid, yGrid, _mainChartHeight);
+      /************************
+       * Build the actual UI. *
+       ************************/
+      this._addMainGrid(_mainChartHeight);
+      this._addMainAxes(_mainChartHeight);
+      this._addContextAxis(_mainChartHeight, _contextChartHeight);
 
-      // Add the main axes.
-      this._addMainAxes(xAxis, yAxis, _mainChartHeight);
-
-      // Add the context x-axis.
-      g.append('g')
-       .attr('class', 'ev-axis context-x-axis')
-       .attr('transform',
-             'translate(0,' + (_mainChartHeight + margins.bottom +
-                               _contextChartHeight + contextMargins.top) + ')')
-       .call(x2Axis);
-
-      this._addChartLines(_mainChartHeight, _mainChartWidth, _data, mainLineFn);
-
-      g.append('g')
-       .attr('class', 'ev-context-chart-lines')
-       .selectAll('.ev-context-chart-line')
-       .data(_data)
-      .enter()
-       .append('path')
-       .attr('class', 'ev-context-chart-line')
-       .attr('transform',
-             'translate(0,' + (_mainChartHeight + margins.bottom +
-                               contextMargins.top) + ')')
-       .attr('d', contextLineFn)
-       .style('stroke', _colorFn);
+      this._addChartLines(_mainChartHeight, _mainChartWidth, data, mainLineFn);
+      this._addContextLines(_mainChartHeight, data, contextLineFn);
 
       if (showTooltip) {
         this._addTooltip();
         this._addHoverRect(_mainChartHeight, _mainChartWidth);
-      }
-
-      // Taken from crossfilter (http://square.github.com/crossfilter/)
-      function resizePath(d) {
-        var e = +(d == 'e'),
-            x = e ? 1 : -1,
-            y = _contextChartHeight / 3;
-        return 'M' + (0.5 * x) + ',' + y +
-          'A6,6 0 0 ' + e + ' ' + (6.5 * x) + ',' + (y + 6) +
-          'V' + (2 * y - 6) +
-          'A6,6 0 0 ' + e + ' ' + (0.5 * x) + ',' + (2 * y) +
-          'Z'+
-          'M' + (2.5 * x) + ',' + (y + 8) +
-          'V' + (2 * y - 8) +
-          'M' + (4.5 * x) + ',' + (y + 8) +
-          'V' + (2 * y - 8);
       }
 
       contextG = g.append('g')
@@ -1282,66 +1434,10 @@ $(function() {
         .attr('height', _contextChartHeight);
       gBrush.selectAll('.resize').append('path').attr('d', resizePath);
 
-      function updateBrushBG() {
-        if (!brush.empty()) brush.extent(brushExtent);
-        brushBG
-            .data([brush.empty() ? x2Scale.domain() : brushExtent])
-            .each(function(d, i) {
-              var leftWidth = x2Scale(d[0]) - x2Scale.range()[0],
-                  rightWidth = x2Scale.range()[1] - x2Scale(d[1]);
-              d3.select(this).select('.left')
-                .attr('width', leftWidth < 0 ? 0 : leftWidth);
-
-              d3.select(this).select('.right')
-                .attr('x', x2Scale(d[1]))
-                .attr('width', rightWidth < 0 ? 0 : rightWidth);
-            });
-      }
-      function onBrush() {
-        brushExtent = brush.empty() ? null : brush.extent();
-
-        xDomain = self._getXDomain(_data, brushExtent);
-        yDomain = self._getYDomain(_data, brushExtent, true);
-        xTickFormat = self._getTimeTickFormatFn(_data, xDomain);
-
-        // Update the scales for the grid and axes.
-        xScale.domain(xDomain);
-        yScale.domain(yDomain);
-
-        xAxis.tickFormat(xTickFormat);
-
-        // Redraw the grid, axes, and lines.
-        g.select('.ev-grid.main-x-grid')
-         .call(xGrid);
-        g.select('.ev-grid.main-y-grid')
-         .call(yGrid);
-        g.select('.ev-axis.main-x-axis')
-         .call(xAxis);
-        g.select('.ev-axis.main-y-axis')
-         .call(yAxis);
-        g.select('.ev-chart-lines')
-         .selectAll('.ev-chart-line')
-         .attr('d', mainLineFn);
-
-        updateBrushBG();
-
-        // If we are showing a tooltip, we should recompute the point to pixel
-        // coordinates.
-        if (showTooltip) {
-          self._precomputePoints(_data, xScale, yScale);
-        }
-
-        // If the user supplied an onbrush callback, call it.
-        if (userOnBrush) {
-          userOnBrush(brushExtent);
-        }
-      }
-
       onBrush();
       if (userOnRender) {
         userOnRender();
       }
-
     }.observes('_data')
   });
 
