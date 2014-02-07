@@ -57,6 +57,10 @@
      * Public variables that can be overwritten.
      **************************************************************************/
 
+    initialize: function() {
+      this.applyUserOptions();
+    }.on('init'),
+
     classNames: ['ev-line-chart'],
 
     // Default options. User can override any or all of them by setting an
@@ -85,50 +89,41 @@
     // 'width' attributes or apply CSS height and width styles to the div.
     defaultWidth: 600,
     defaultHeightRatio: 0.5,
+    _legendActualHeight: 0,
 
     showTooltip: true,
-    tooltipContentFn: null,
     timeFormatter: d3.time.format.utc,
 
     valueFormatFn: d3.format(''),
     valueTickFormatFn: d3.format('.2s'),
 
-    // Scales and axes need to be computed properties so that multiple charts on a page don't share the created scale.
+    line: function() {
+      var xScale = this.get('xScale'),
+          yScale = this.get('yScale');
+      return this.get('lineType')()
+        .x(function(d) { return xScale(d.x); })
+        .y(function(d) { return yScale(d.y); });
+    }.property('lineType', 'xScale', 'yScale'),
     xScale: function() {
-      return d3.time.scale.utc();
-    }.property(),
-
+      return d3.time.scale.utc().domain(this.get('xDomain')).range([0, this.get('_mainChartWidth')]);
+    }.property('xDomain', '_mainChartWidth'),
     yScale: function() {
-      return d3.scale.linear();
-    }.property(),
-
+      return d3.scale.linear().domain(this.get('yDomain')).range([this.get('_mainChartHeight'), 0]);
+    }.property('yDomain', '_mainChartHeight'),
     xAxis: function() {
-      return d3.svg.axis()
-        .orient('bottom')
-        .ticks(7);
-    }.property(),
-
+      return d3.svg.axis().orient('bottom').ticks(7).scale(this.get('xScale')).tickFormat(this.get('timeTickFormatFn'));
+    }.property('xScale', 'timeTickFormatFn'),
     yAxis: function() {
-      return d3.svg.axis()
-        .orient('left');
-    }.property(),
-
+      return d3.svg.axis().orient('left').scale(this.get('yScale')).tickFormat(this.get('valueTickFormatFn'));
+    }.property('yScale', 'valueTickFormatFn'),
     xGrid: function() {
-      return d3.svg.axis()
-        .orient('bottom')
-        .ticks(7)
-        .tickFormat('');
-    }.property(),
-
+      return d3.svg.axis().orient('bottom').ticks(7).tickFormat('').scale(this.get('xScale'))
+        .tickSize(-1 * this.get('_mainChartHeight'), 0, 0);
+    }.property('xScale', '_mainChartHeight'),
     yGrid: function() {
-      return d3.svg.axis()
-        .orient('left')
-        .tickFormat('');
-    }.property(),
-
-    initialize: function() {
-      this.applyUserOptions();
-    }.on('init'),
+      return d3.svg.axis().orient('left').tickFormat('').scale(this.get('yScale'))
+        .tickSize(-1 * this.get('_mainChartWidth'), 0, 0);
+    }.property('yScale', '_mainChartWidth'),
 
     applyUserOptions: function() {
       var options = this.getWithDefault('options', Ember.Object.create()),
@@ -157,8 +152,7 @@
         return heightRatio * width;
       }
       return height;
-    }.property(),
-
+    }.property('width', 'defaultHeightRatio'),
     width: function() {
       var elementId = this.get('elementId'),
           $container = $('#' + elementId),
@@ -170,47 +164,24 @@
         return this.get('defaultWidth');
       }
       return width;
-    }.property(),
-
-    /***************************************************************************
-     * Private variables and functions that should not be overwritten.
-     **************************************************************************/
-
-    _getTooltipContentFn: function(valueFormatFn, timeFormatFn) {
-      var tooltipContentFn = this.get('tooltipContentFn');
-
-      // If the user provided a tooltip content function, return it.
-      if (tooltipContentFn) {
-        return tooltipContentFn;
-      }
-
-      return function(x, y, elem, seriesName) {
-        return '<h5>' + seriesName + '</h5>' +
-               '<hr />' +
-               '<p>' + valueFormatFn(y) + ' at ' +
-               timeFormatFn(new Date(x)) + '</p>';
-      };
-    },
-
-    _getLineFn: function(line) {
-      return function(d) {
-        if (d.disabled) {
-          return line([]);
-        } else {
-          return line(d.values);
-        }
-      };
-    },
-
-    _getTimeFormatFn: function(data) {
-      var timeFormatFn = this.get('timeFormatFn'),
+    }.property('defaultWidth'),
+    svgHeight: function() {
+      return this.get('height') - this.get('_legendActualHeight');
+    }.property('height', '_legendActualHeight'),
+    _mainChartHeight: function() {
+      var height = this.get('svgHeight'),
+          margins = this.get('margins');
+      return height - margins.top - margins.bottom;
+    }.property('svgHeight', 'margins'),
+    _mainChartWidth: function() {
+      var width = this.get('width'),
+          margins = this.get('margins');
+      return width - margins.right - margins.left;
+    }.property('width', 'margins'),
+    timeFormatFn: function() {
+      var data = this.get('_data'),
           timeFormatter = this.get('timeFormatter'),
           avgGranularity = this._getAverageGranularity(data);
-
-      // If the user provided a time format function, return it.
-      if (timeFormatFn) {
-        return timeFormatFn;
-      }
 
       // If the average granularity is around or greater than one point per day,
       // only show month and date.
@@ -226,18 +197,41 @@
 
       // Otherwise, show month, date, hour, and minute.
       return timeFormatter('%m/%d %H:%M');
-    },
+    }.property('_data', 'timeFormatter'),
 
+    tooltipContentFn: function() {
+      var valueFormatFn = this.get('valueFormatFn'),
+          timeFormatFn = this.get('timeFormatFn');
 
-    _getTimeTickFormatFn: function(data, xDomain) {
-      var timeTickFormatFn = this.get('timeTickFormatFn'),
+      return function(x, y, elem, seriesName) {
+        return '<h5>' + seriesName + '</h5>' +
+               '<hr />' +
+               '<p>' + valueFormatFn(y) + ' at ' +
+               timeFormatFn(new Date(x)) + '</p>';
+      };
+    }.property('valueFormatFn', 'timeFormatFn'),
+
+    lineFn: function() {
+      var line = this.get('line');
+      return function(d) {
+        if (d.disabled) {
+          return line([]);
+        } else {
+          return line(d.values);
+        }
+      };
+    }.property('line'),
+
+    /***************************************************************************
+     * Private variables and functions that should not be overwritten.
+     **************************************************************************/
+
+    timeTickFormatFn: function() {
+      var data = this.get('_data'),
+          xDomain = this.get('xDomain'),
           totalTimeRange = xDomain[1] - xDomain[0],
           timeFormatter = this.get('timeFormatter'),
           avgGranularity = this._getAverageGranularity(data);
-
-      if (timeTickFormatFn) {
-        return timeTickFormatFn;
-      }
 
       // If the average granularity is around or greater than one point per day,
       // only show month and date.
@@ -259,33 +253,19 @@
 
       // In the scope of less than a day, show the time without the date.
       return timeFormatter('%H:%M');
-    },
-
-    _getXDomain: function(data) {
-      var domain = Ember.EmberViz.Helpers.getDomain(data,
+    }.property('_data', 'xDomain', 'timeFormatter'),
+    xDomain: function() {
+      var data = this.get('_data'),
+          domain = Ember.EmberViz.Helpers.getDomain(data,
                                                    function(d) { return d.x; });
       return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
-    },
-
-    _getYDomain: function(data) {
-      var domain = Ember.EmberViz.Helpers.getDomain(data,
+    }.property('_data.@each.disabled', 'forceX'),
+    yDomain: function() {
+      var data = this.get('_data'),
+          domain = Ember.EmberViz.Helpers.getDomain(data,
                                                    function(d) { return d.y; });
-      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceY'),
-                                                   this.get('includeZero'));
-    },
-
-    _mainChartHeight: function() {
-      var height = this.get('height'),
-          margins = this.get('margins');
-      return height - margins.top - margins.bottom;
-    }.property('height'),
-
-    _mainChartWidth: function() {
-      var width = this.get('width'),
-          margins = this.get('margins');
-      return width - margins.right - margins.left;
-    }.property('width'),
-
+      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceY'), this.get('includeZero');
+    }.property('_data.@each.disabled', 'forceY', 'includeZero'),
     _getAverageGranularity: function(data) {
       var count = 0;
       var total = 0;
@@ -300,80 +280,84 @@
       });
       return total / count;
     },
-
-    _colorFn: function() {
+    colorFn: function() {
       var colors = d3.scale.category20().range();
       return function(d, i) { return d.color || colors[i % colors.length]; };
     }.property(),
-
     _data: function() {
-      var data = this.get('data'),
+      var result = [],
+          data = this.get('data'),
           getX = this.get('getX'),
           getY = this.get('getY');
 
       // Verify that the getX and getY attributes are functions.
       if (typeof getX !== 'function') {
-        throw 'Provided "getX" attribute is not a valid function. ' +
-          SEE_DOCUMENTATION_MSG;
+        console.error('Provided "getX" attribute is not a valid function. ', SEE_DOCUMENTATION_MSG);
+        return result;
       }
       if (typeof getY !== 'function') {
-        throw 'Provided "getY" attribute is not a valid function. ' +
-          SEE_DOCUMENTATION_MSG;
+        console.error('Provided "getY" attribute is not a valid function. ', SEE_DOCUMENTATION_MSG);
+        return result;
       }
 
       // Verify that the data attribute is valid and that it has a map function.
       if (!data || typeof data.map !== 'function') {
-        return [];
+        return result;
       }
 
       // Make a deep copy of data to avoid manipulating the controller's clean
       // data.
-      return data.map(function(series) {
-        var valuesCopy = series.values.map(function(elem) {
-          var x,
-              y,
-              xError = 'Could not extract a valid datapoint using' +
-                ' the supplied "getX" function.' + SEE_DOCUMENTATION_MSG,
-              yError = 'Could not extract a valid datapoint using' +
-                ' the supplied "getY" function.' + SEE_DOCUMENTATION_MSG;
+      try {
+        result = data.map(function(series) {
+          var valuesCopy = series.values.map(function(elem) {
+            var x,
+                y,
+                // scaledX,
+                xError = 'Could not extract a valid datapoint using' +
+                  ' the supplied "getX" function.' + SEE_DOCUMENTATION_MSG,
+                yError = 'Could not extract a valid datapoint using' +
+                  ' the supplied "getY" function.' + SEE_DOCUMENTATION_MSG;
 
-          // Use the getX and getY functions to extract the x and y values from
-          // each datapoint.
-          try {
-            x = getX(elem);
-          } catch (e) {
-            throw xError;
-          }
-          try {
-            y = getY(elem);
-          } catch (e) {
-            throw yError;
-          }
+            // Use the getX and getY functions to extract the x and y values from
+            // each datapoint.
+            try {
+              x = getX(elem);
+            } catch (e) {
+              throw xError;
+            }
+            try {
+              y = getY(elem);
+            } catch (e) {
+              throw yError;
+            }
 
-          // Verify that the extracted values are actually numbers.
-          if (isNaN(x)) {
-            throw xError;
-          }
-          if (isNaN(y)) {
-            throw yError;
-          }
+            // Verify that the extracted values are actually numbers.
+            if (isNaN(x)) {
+              throw xError;
+            }
+            if (isNaN(y)) {
+              throw yError;
+            }
 
-          return {
-            x: x,
-            y: y,
-            original: elem
-          };
+            return {
+              x: x,
+              y: y,
+              original: elem
+            };
+          });
+
+          return Ember.Object.create({
+            key: series.key,
+            values: valuesCopy,
+            disabled: series.disabled
+          });
         });
+      } catch(e) {
+        console.error(e);
+        return result;
+      }
 
-        return {
-          key: series.key,
-          values: valuesCopy,
-          disabled: series.disabled
-        };
-      });
-
-      // TODO: Reset brushExtent if it exists and no longer fits the data array.
-
+      return result;
     }.property('data.[]', 'getX', 'getY'),
 
     _precomputePointLocations: function() {
@@ -402,7 +386,6 @@
         });
       });
     },
-
     _findClosestPoint: function(data, xPosition, yPosition) {
       var closestPoint,
           seriesName,
@@ -417,7 +400,7 @@
 
       data.forEach(function(series) {
 
-        if (series.disabled) {
+        if (series.get('disabled')) {
           return;
         }
 
@@ -454,18 +437,10 @@
         seriesName: seriesName
       };
     },
-
     _handleMouseMove: function() {
       var prevClosestPoint,
           self = this,
-          data = this.get('_data'),
-          margins = this.get('margins'),
-          elementId = this.get('elementId'),
-          valueFormatFn = this.get('valueFormatFn'),
-          timeFormatFn = this._getTimeFormatFn(data),
-          tooltipContentFn = this._getTooltipContentFn(valueFormatFn,
-                                                       timeFormatFn),
-          bodyWidth = $('body').width();
+          elementId = this.get('elementId');
 
       return function() {
         var html,
@@ -475,12 +450,13 @@
             closestPointPosition,
             closestPointValues,
             widthPastWindow,
+            margins = self.get('margins'),
             position = d3.mouse(this),
             xPosition = position[0],
             yPosition = position[1],
             $tooltipDiv = $('#' + elementId + ' .ev-chart-tooltip'),
             tooltipCircle = d3.select('#' + elementId + ' .ev-tooltip-circle'),
-            closestPointInfo = self._findClosestPoint(data, xPosition,
+            closestPointInfo = self._findClosestPoint(self.get('_data'), xPosition,
                                                       yPosition),
             userMouseMove = self.get('onMouseMove');
 
@@ -488,9 +464,9 @@
         // display information about that point.
         if (closestPointInfo) {
           closestPoint = closestPointInfo.point;
-          html = tooltipContentFn(closestPoint.x, closestPoint.y,
-                                  closestPoint.original,
-                                  closestPointInfo.seriesName);
+          html = self.get('tooltipContentFn')(closestPoint.x, closestPoint.y,
+                                              closestPoint.original,
+                                              closestPointInfo.seriesName);
 
           // Update the tooltipDiv contents.
           $tooltipDiv.html(html);
@@ -506,7 +482,7 @@
           // Determine if the new location of the tooltip goes off the window
           // and move it inside the window if that's the case.
           widthPastWindow = ($tooltipDiv.offset().left + $tooltipDiv.width()) -
-            bodyWidth;
+            $('body').width();
           if (widthPastWindow > 0) {
             $tooltipDiv.css('left', newLeft - widthPastWindow);
           }
@@ -558,11 +534,9 @@
           tooltipCircle.style('display', 'none');
         }
       };
-    }.property('_data', 'valueFormatFn', 'margins'),
-
+    }.property(),
     _handleMouseOut: function() {
       var elementId = this.get('elementId');
-
       return function() {
         // Hide the tooltip.
         $('#' + elementId + ' .ev-chart-tooltip')
@@ -573,11 +547,8 @@
           .style('display', 'none');
       };
     }.property(),
-
     _handleMouseClick: function() {
-      var self = this,
-          data = this.get('_data'),
-          userOnClick = this.get('onClick');
+      var self = this;
 
       return function() {
         var clickPosition,
@@ -585,9 +556,9 @@
             position = d3.mouse(this),
             xPosition = position[0],
             yPosition = position[1],
-            closestPointInfo = self._findClosestPoint(data, xPosition,
-                                                      yPosition);
-
+            closestPointInfo = self._findClosestPoint(self.get('_data'), xPosition,
+                                                      yPosition),
+            userOnClick = self.get('onClick');
         clickPosition = {
           x: position[0],
           y: position[1]
@@ -605,8 +576,7 @@
           }
         }
       };
-    }.property('onClick', '_data', 'margins'),
-
+    }.property(),
     didInsertElement: function() {
       var self = this;
 
@@ -617,43 +587,118 @@
       }
 
       // Re-render the chart when the window is resized.
-      $(window).resize(resize);
+      $(window).resize(function() {
+        Ember.run(resize);
+      });
       this.set('shouldRender', true);
       resize();
     },
-
-    _addContainer: function() {
+    _addChartContainer: function() {
       var elementId = this.get('elementId'),
-          width = this.get('width'),
-          height = this.get('height'),
           margins = this.get('margins');
 
       // Add and size the main svg element for the chart and create the main 'g'
       // container for all of the chart components.
-      d3.select('#' + elementId).append('svg')
+      d3.select('#' + elementId).insert('svg', '#' + elementId + ' .ev-legend')
         .attr('class', 'ev-svg')
-        .attr('width', width)
-        .attr('height', height)
+        .attr('width', this.get('width'))
+        .attr('height', this.get('svgHeight'))
       .append('g')
         .attr('class', 'ev-main')
         .attr('transform',
               'translate(' + margins.left + ',' + margins.top + ')');
-
     },
-
+    clickCommon: function() {
+      var g = d3.select('#' + this.get('elementId') + ' .ev-main');
+      g.select('.ev-grid.main-y-grid')
+       .call(this.get('yGrid'));
+      g.select('.ev-axis.main-x-axis')
+       .call(this.get('xAxis'));
+      g.select('.ev-axis.main-y-axis')
+       .call(this.get('yAxis'));
+      g.selectAll('.ev-chart-line')
+       .attr('d', this.get('lineFn'));
+      this._precomputePointLocations();
+    },
     _addLegend: function() {
-      var elementId = this.get('elementId'),
-          legendHeight = this.get('legendHeight'),
+      var legendDiv,
+          self = this,
+          elementId = this.get('elementId'),
           legendMargins = this.get('legendMargins'),
+          data = this.get('_data'),
+          colorFn = this.get('colorFn'),
           $container = $('#' + elementId),
           $legendDiv = $('<div class="ev-legend">')
-            .css('max-height', legendHeight)
+            .css('max-height', this.get('legendHeight'))
             .css('margin-top', legendMargins.top)
             .css('margin-right', legendMargins.right)
             .css('margin-bottom', legendMargins.bottom)
             .css('margin-left', legendMargins.left);
 
       $container.append($legendDiv);
+
+      // jQuery can't add the svg and circle elements correctly, so switch to
+      // using d3.
+      legendDiv = d3.select('#' + elementId + ' .ev-legend');
+      data.forEach(function(elem, index) {
+        var key = elem.key,
+            normalColor = colorFn(elem, index),
+            startingColor = (elem.get('disabled')) ? 'white' : normalColor,
+            div = legendDiv.append('div');
+
+        var circle = div.append('svg')
+          .attr('class', 'ev-svg')
+          .attr('height', 12)
+          .attr('width', 14)
+        .append('circle')
+          .attr('fill', startingColor)
+          .attr('stroke', 'black')
+          .attr('cx', 6)
+          .attr('cy', 6)
+          .attr('r', 5);
+
+        div.append('a')
+          .text(key + ' ');
+
+        var clickTimeoutId = 0,
+            doubleclick = false;
+        div.on('dblclick', function() {
+          var userData = self.get('data');
+          doubleclick = true;
+
+          // Communicate the disabled status of each element back to the
+          // original data array.
+          userData.setEach('disabled', true);
+          userData[index].disabled = false;
+
+          // Record the disabled status of each element in the internal array.
+          data.setEach('disabled', true);
+          elem.set('disabled', false);
+
+          legendDiv.selectAll('circle')
+            .attr('fill', 'white');
+          circle.attr('fill', normalColor);
+          self.get('clickCommon').call(self);
+          window.setTimeout(function() { doubleclick = false; }, 800);
+        });
+        div.on('click', function() {
+          var newColor,
+              userData = self.get('data');
+          if (!clickTimeoutId) {
+            clickTimeoutId = window.setTimeout(function() {
+              if (!doubleclick) {
+                elem.toggleProperty('disabled');
+                userData[index].disabled = elem.get('disabled');
+                newColor = (elem.get('disabled')) ? 'white' : normalColor;
+                circle.attr('fill', newColor);
+                self.get('clickCommon').call(self);
+              }
+              clickTimeoutId = 0;
+            }, 200);
+          }
+        });
+      });
+      this.set('_legendActualHeight', $legendDiv.outerHeight());
     },
 
     _addTooltip: function() {
@@ -672,296 +717,98 @@
         .attr('cy', 0)
         .attr('r', 5);
     },
-
-    _addHoverRect: function(height, width) {
-      var elementId = this.get('elementId'),
-          _handleMouseClick = this.get('_handleMouseClick'),
-          _handleMouseMove = this.get('_handleMouseMove'),
-          _handleMouseOut = this.get('_handleMouseOut');
-
+    _addHoverRect: function() {
       // Add an invisible rectangle to detect mouse movements.
-      d3.select('#' + elementId + ' .ev-main')
+      d3.select('#' + this.get('elementId') + ' .ev-main')
         .append('rect')
         .attr('class', 'hover-rect')
-        .attr('width', width)
-        .attr('height', height)
+        .attr('width', this.get('_mainChartWidth'))
+        .attr('height', this.get('_mainChartHeight'))
         .style('opacity', 0)
-        .on('mousemove', _handleMouseMove)
-        .on('click', _handleMouseClick)
-        .on('mouseout', _handleMouseOut);
+        .on('mousemove', this.get('_handleMouseMove'))
+        .on('click', this.get('_handleMouseClick'))
+        .on('mouseout', this.get('_handleMouseOut'));
     },
-
-    _addContextLines: function(mainHeight, data, contextLineFn) {
-      var elementId = this.get('elementId'),
-          g = d3.select('#' + elementId + ' .ev-main'),
-          colorFn = this.get('_colorFn'),
-          margins = this.get('margins'),
-          contextMargins = this.get('contextMargins');
-
-      g.append('g')
-       .attr('class', 'ev-context-chart-lines')
-       .selectAll('.ev-context-chart-line')
-       .data(data)
-      .enter()
-       .append('path')
-       .attr('class', 'ev-context-chart-line')
-       .attr('transform',
-             'translate(0,' + (mainHeight + margins.bottom +
-                               contextMargins.top) + ')')
-       .attr('d', contextLineFn)
-       .style('stroke', colorFn);
-    },
-
-    _addChartLines: function(height, width, data, lineFn) {
+    _addChartLines: function() {
       // Add the clip path to hide the lines outside of the main window.
       var elementId = this.get('elementId'),
           clipPathId = elementId + '-clip-path',
-          g = d3.select('#' + elementId + ' .ev-main'),
-          colorFn = this.get('_colorFn');
+          g = d3.select('#' + elementId + ' .ev-main');
 
       g.append('clipPath')
        .attr('id', clipPathId)
        .append('rect')
-       .attr('width', width)
-       .attr('height', height);
-
-      // Add the chart lines.
+       .attr('width', this.get('_mainChartWidth'))
+       .attr('height', this.get('_mainChartHeight'));
       g.append('g')
        .attr('class', 'ev-chart-lines')
        .selectAll('.ev-chart-line')
-       .data(data)
+       .data(this.get('_data'))
        .enter()
         .append('path')
         .attr('class', 'ev-chart-line')
         .attr('clip-path', 'url(#' + clipPathId + ')')
-        .attr('d', lineFn)
-        .style('stroke', colorFn);
+        .attr('d', this.get('lineFn'))
+        .style('stroke', this.get('colorFn'));
     },
-
-    _addMainAxes: function(height) {
-      var elementId = this.get('elementId'),
-          g = d3.select('#' + elementId + ' .ev-main'),
-          xAxis = this.get('xAxis'),
-          yAxis = this.get('yAxis');
-
+    _addMainAxes: function() {
+      var g = d3.select('#' + this.get('elementId') + ' .ev-main');
       g.append('g')
        .attr('class', 'ev-axis main-x-axis')
-       .attr('transform', 'translate(0,' + height + ')')
-       .call(xAxis);
-
+       .attr('transform', 'translate(0,' + this.get('_mainChartHeight') + ')')
+       .call(this.get('xAxis'));
       g.append('g')
        .attr('class', 'ev-axis main-y-axis')
-       .call(yAxis);
+       .call(this.get('yAxis'));
     },
-
-    _addMainGrid: function(height) {
-      var elementId = this.get('elementId'),
-          g = d3.select('#' + elementId + ' .ev-main'),
-          xGrid = this.get('xGrid'),
-          yGrid = this.get('yGrid');
-
+    _addMainGrid: function() {
+      var g = d3.select('#' + this.get('elementId') + ' .ev-main');
       g.append('g')
          .attr('class', 'ev-grid main-y-grid')
-         .call(yGrid);
+         .call(this.get('yGrid'));
 
       g.append('g')
          .attr('class', 'ev-grid main-x-grid')
-         .attr('transform', 'translate(0,' + height + ')')
-         .call(xGrid);
+         .attr('transform', 'translate(0,' + this.get('_mainChartHeight') + ')')
+         .call(this.get('xGrid'));
     },
-
+    observesHeight: function() {
+      d3.select('#' + this.get('elementId') + ' .ev-svg')
+        .attr('height', this.get('svgHeight'));
+    }.observes('svgHeight'),
     _render: function() {
-      var shouldRender = this.get('shouldRender');
+      var shouldRender = this.get('shouldRender'),
+          data = this.get('_data'),
+          showLegend = this.get('showLegend'),
+          showTooltip = this.get('showTooltip'),
+          userOnRender = this.get('onRender');
+
       if (!shouldRender) {
         return;
       }
 
-      var g,
-          svg,
-          xDomain,
-          yDomain,
-          timeTickFormatFn,
-
-          self = this,
-
-          elementId = this.get('elementId'),
-          $container = $('#' + elementId),
-
-          data = this.get('_data'),
-          userData = this.get('data'),
-
-          height = this.get('height'),
-          _mainChartHeight = this.get('_mainChartHeight'),
-          _mainChartWidth = this.get('_mainChartWidth'),
-
-          lineType = this.get('lineType'),
-          line = lineType(),
-          lineFn = this._getLineFn(line),
-
-          showLegend = this.get('showLegend'),
-          showTooltip = this.get('showTooltip'),
-
-          xScale = this.get('xScale'),
-          yScale = this.get('yScale'),
-          xAxis = this.get('xAxis'),
-          yAxis = this.get('yAxis'),
-          xGrid = this.get('xGrid'),
-          yGrid = this.get('yGrid'),
-
-          valueTickFormatFn = this.get('valueTickFormatFn'),
-          colorFn = this.get('_colorFn'),
-
-          userOnRender = this.get('onRender');
-
       // Clear the div.
-      $container.empty();
+      $('#' + this.get('elementId')).empty();
 
+      // TODO: replace this with some computed property so we don't need data in
+      // the render function.
       if (Ember.isEmpty(data)) {
         return;
       }
 
-      xDomain = this._getXDomain(data);
-      yDomain = this._getYDomain(data);
-      timeTickFormatFn = this._getTimeTickFormatFn(data, xDomain);
-
-      this._addContainer();
-      svg = d3.select('#' + elementId + ' svg');
-      g = d3.select('#' + elementId + ' .ev-main');
+      this._addChartContainer();
 
       if (showLegend) {
-
         this._addLegend();
-        var $legendDiv = $('#' + elementId + ' .ev-legend');
-
-        // jQuery can't add the svg and circle elements correctly, so switch to
-        // using d3.
-        var legendDiv = d3.select('#' + elementId + ' .ev-legend');
-        data.forEach(function(elem, index) {
-          var key = elem.key,
-              normalColor = colorFn(elem, index),
-              startingColor = (elem.disabled) ? 'white' : normalColor,
-              div = legendDiv.append('div');
-
-          var circle = div.append('svg')
-            .attr('class', 'ev-svg')
-            .attr('height', 12)
-            .attr('width', 14)
-          .append('circle')
-            .attr('fill', startingColor)
-            .attr('stroke', 'black')
-            .attr('cx', 6)
-            .attr('cy', 6)
-            .attr('r', 5);
-
-          div.append('a')
-            .text(key + ' ');
-
-          function clickCommon() {
-            yDomain = self._getYDomain(data);
-            xDomain = self._getXDomain(data);
-
-            xScale.domain(xDomain);
-            yScale.domain(yDomain);
-
-            g.select('.ev-grid.main-y-grid')
-             .call(yGrid);
-            g.select('.ev-axis.main-x-axis')
-             .call(xAxis);
-            g.select('.ev-axis.main-y-axis')
-             .call(yAxis);
-
-            g.selectAll('.ev-chart-line')
-             .attr('d', lineFn);
-            self._precomputePointLocations();
-          }
-          var clickTimeoutId = 0,
-              doubleclick = false;
-          div.on('dblclick', function() {
-            doubleclick = true;
-
-            // Communicate the disabled status of each element back to the
-            // original data array.
-            userData.setEach('disabled', true);
-            userData[index].disabled = false;
-
-            // Record the disabled status of each element in the internal array.
-            data.setEach('disabled', true);
-            elem.disabled = false;
-
-            legendDiv.selectAll('circle')
-              .attr('fill', 'white');
-            circle.attr('fill', normalColor);
-            clickCommon();
-            window.setTimeout(function() { doubleclick = false; }, 800);
-          });
-          div.on('click', function() {
-            if (!clickTimeoutId) {
-              clickTimeoutId = window.setTimeout(function() {
-                if (!doubleclick) {
-                  elem.disabled = (elem.disabled) ? false : true;
-                  var newColor = (elem.disabled) ? 'white' : normalColor;
-                  circle.attr('fill', newColor);
-                  clickCommon();
-                }
-                clickTimeoutId = 0;
-              }, 200);
-            }
-          });
-        });
-
-        // TODO: CLEAN UP THIS NONSENSE
-        var newHeight = height - $legendDiv.outerHeight();
-        svg.attr('height', newHeight);
-        _mainChartHeight -= $legendDiv.outerHeight();
-        yScale.range([_mainChartHeight, 0]);
       }
 
-      /******************************
-       * Set up all the components. *
-       ******************************/
-
-      // Scales
-      xScale
-        .domain(xDomain)
-        .range([0, _mainChartWidth]);
-      yScale
-        .domain(yDomain)
-        .range([_mainChartHeight, 0]);
-
-      // Line function.
-      line
-        .x(function(d) { return xScale(d.x); })
-        .y(function(d) { return yScale(d.y); });
-
-      // Grid lines (d3 axis with modified tick marks)
-      xGrid
-        .scale(xScale)
-        .tickSize(-1 * _mainChartHeight, 0, 0);
-      yGrid
-        .scale(yScale)
-        .tickSize(-1 * _mainChartWidth, 0, 0);
-
-      // Axes
-      xAxis
-        .scale(xScale)
-        .tickFormat(timeTickFormatFn);
-      yAxis
-        .scale(yScale)
-        .tickFormat(valueTickFormatFn);
-
-      /************************
-       * Build the actual UI. *
-       ************************/
-      this._addMainGrid(_mainChartHeight);
-      this._addMainAxes(_mainChartHeight);
-      this._addChartLines(_mainChartHeight, _mainChartWidth, data, lineFn);
+      this._addMainGrid();
+      this._addMainAxes();
+      this._addChartLines();
 
       if (showTooltip) {
         this._addTooltip();
-        this._addHoverRect(_mainChartHeight, _mainChartWidth);
-
-        // Precompute the pixel locations of all the points, but only after the
-        // rest of the chart is rendered.
+        this._addHoverRect();
         this._precomputePointLocations();
       }
 
@@ -990,47 +837,49 @@ $(function() {
     // User defined callbacks.
     onBrush: null,
 
-    // Scales need to be computed properties so that multiple charts on a page
-    // don't share a single created scale.
+    contextLine: function() {
+      var self = this;
+      return this.get('lineType')()
+        .x(function(d) { return self.get('x2Scale')(d.x); })
+        .y(function(d) { return self.get('y2Scale')(d.y); });
+    }.property('lineType', 'x2Scale', 'y2Scale'),
+    contextLineFn: function() {
+      var line = this.get('contextLine');
+      return function(d) {
+        if (d.disabled) {
+          return line([]);
+        } else {
+          return line(d.values);
+        }
+      };
+    }.property('contextLine'),
     x2Scale: function() {
-      return d3.time.scale.utc();
-    }.property(),
+      return d3.time.scale.utc().domain(this.get('x2Domain')).range([0, this.get('_contextChartWidth')]);
+    }.property('x2Domain', '_contextChartWidth'),
     y2Scale: function() {
-      return d3.scale.linear();
-    }.property(),
-
+      return d3.scale.linear().domain(this.get('y2Domain')).range([this.get('_contextChartHeight'), 0]);
+    }.property('y2Domain', '_contextChartHeight'),
     x2Axis: function() {
-      return d3.svg.axis()
-        .orient('bottom')
-        .ticks(7);
+      return d3.svg.axis().orient('bottom').ticks(7).scale(this.get('x2Scale'))
+        .tickFormat(this.get('timeTickFormatFn'));
     }.property(),
-
-    /***************************************************************************
-     * Private variables and functions that should not be overwritten.
-     **************************************************************************/
-
-    _getXDomain: function(data, brushExtent) {
-      var domain = Ember.EmberViz.Helpers.getDomain(data,
-                                                   function(d) { return d.x; });
-
+    xDomain: function() {
+      var brushExtent = this.get('brushExtent'),
+          domain = Ember.EmberViz.Helpers.getDomain(this.get('_data'), function(d) { return d.x; });
       if (brushExtent) {
         domain = brushExtent;
       }
-
       return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
-
-    },
-
-    _getX2Domain: function(data) {
-      var domain = Ember.EmberViz.Helpers.getDomain(data,
+    }.property('_data', 'brushExtent', 'forceX'),
+    x2Domain: function() {
+      var domain = Ember.EmberViz.Helpers.getDomain(this.get('_data'),
                                                    function(d) { return d.x; });
-
       return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
-
-    },
-
-    _getYDomain: function(data, brushExtent, overrideDomain) {
-      var domain;
+    }.property('_data', 'forceX'),
+    yDomain: function() {
+      var domain,
+          data = this.get('_data'),
+          brushExtent = this.get('brushExtent');
 
       // If there is a brushExtent, we should restrict the y domain to the
       // points within the brushExtent timespan.
@@ -1057,267 +906,113 @@ $(function() {
         domain = Ember.EmberViz.Helpers.getDomain(data,
                                                    function(d) { return d.y; });
       }
+      return Ember.EmberViz.Helpers.overrideDomain(domain,
+                                                   this.get('forceY'),
+                                                   this.get('includeZero'));
+    }.property('_data.@each.disabled', 'brushExtent', 'forceY', 'includeZero'),
+    y2Domain: function() {
+      var data = this.get('_data'),
+          brushExtent = this.get('brushExtent');
 
-      if (overrideDomain) {
-        return Ember.EmberViz.Helpers.overrideDomain(domain,
-                                                     this.get('forceY'), this.get('includeZero'));
+      // If there is a brushExtent, we should restrict the y domain to the
+      // points within the brushExtent timespan.
+      if (brushExtent) {
+        var minValue = null,
+            maxValue = null,
+            enabledSeries = data.rejectBy('disabled');
+
+        enabledSeries.forEach(function(series) {
+          series.values.forEach(function(point) {
+            if (point.x >= brushExtent[0] && point.x <= brushExtent[1]) {
+              if (minValue === null || point.y < minValue) {
+                minValue = point.y;
+              }
+              if (maxValue === null || point.y > maxValue) {
+                maxValue = point.y;
+              }
+            }
+          });
+        });
+        return [minValue, maxValue];
       } else {
-        return domain;
+        return Ember.EmberViz.Helpers.getDomain(data,
+                                                function(d) { return d.y; });
       }
-    },
-
+    }.property('_data', 'brushExtent'),
     _contextChartHeight: function() {
-      var contextHeight = this.get('contextHeight'),
-          margins = this.get('contextMargins');
-      return contextHeight - margins.bottom - margins.top;
+      var margins = this.get('contextMargins');
+      return this.get('contextHeight') - margins.bottom - margins.top;
     }.property('contextHeight', 'contextMargins'),
-
     _contextChartWidth: function() {
-      var contextWidth = this.get('contextWidth'),
-          margins = this.get('contextMargins');
-      return contextWidth - margins.left - margins.right;
+      var margins = this.get('contextMargins');
+      return this.get('contextWidth') - margins.left - margins.right;
     }.property('contextWidth', 'contextMargins'),
-
-    // Override this height to create space for the context chart.
     _mainChartHeight: function() {
-      var height = this.get('height'),
-          contextHeight = this.get('contextHeight'),
-          margins = this.get('margins');
+      var margins = this.get('margins');
+      return this.get('svgHeight') - this.get('contextHeight') - margins.top - margins.bottom;
+    }.property('svgHeight', 'contextHeight', 'margins'),
+    _addContextLines: function() {
+      var mainHeight = this.get('_mainChartHeight'),
+          data = this.get('_data'),
+          margins = this.get('margins'),
+          contextMargins = this.get('contextMargins');
 
-      return height - contextHeight - margins.top - margins.bottom;
-    }.property('height', 'contextHeight', 'margins'),
-
-    _addContextAxis: function(mainChartHeight, contextChartHeight) {
-      var elementId = this.get('elementId'),
-          g = d3.select('#' + elementId + ' .ev-main'),
-          x2Axis = this.get('x2Axis'),
+      d3.select('#' + this.get('elementId') + ' .ev-main')
+        .append('g')
+        .attr('class', 'ev-context-chart-lines')
+        .selectAll('.ev-context-chart-line')
+        .data(data)
+       .enter()
+        .append('path')
+        .attr('class', 'ev-context-chart-line')
+        .attr('transform',
+              'translate(0,' + (mainHeight + margins.bottom +
+                                contextMargins.top) + ')')
+        .attr('d', this.get('contextLineFn'))
+        .style('stroke', this.get('colorFn'));
+    },
+    _addContextAxis: function() {
+      var mainChartHeight = this.get('_mainChartHeight'),
+          contextChartHeight = this.get('_contextChartHeight'),
           margins = this.get('margins'),
           contextMargins = this.get('contextMargins');
 
       // Add the context x-axis.
-      g.append('g')
-       .attr('class', 'ev-axis context-x-axis')
-       .attr('transform',
+      d3.select('#' + this.get('elementId') + ' .ev-main')
+        .append('g')
+        .attr('class', 'ev-axis context-x-axis')
+        .attr('transform',
              'translate(0,' + (mainChartHeight + margins.bottom +
                                contextChartHeight + contextMargins.top) + ')')
-       .call(x2Axis);
-
+        .call(this.get('x2Axis'));
     },
-
-    _render: function() {
-      var shouldRender = this.get('shouldRender');
-
-      if (!shouldRender) {
-        return;
-      }
-
-      var g,
-          svg,
-          contextG,
-          brushBG,
-          brushBGenter,
-          gBrush,
-
-          xDomain,
-          yDomain,
-
-          x2Domain,
-          y2Domain,
-
+    brush: function() {
+      var brush,
           self = this,
-
           elementId = this.get('elementId'),
-          $container = $('#' + elementId),
-
-          data = this.get('_data'),
-          userData = this.get('data'),
-
-          height = this.get('height'),
-          _mainChartHeight = this.get('_mainChartHeight'),
-          _contextChartHeight = this.get('_contextChartHeight'),
-          _mainChartWidth = this.get('_mainChartWidth'),
-          _contextChartWidth = this.get('_contextChartWidth'),
-
-          lineType = this.get('lineType'),
-          mainLine = lineType(),
-          contextLine = lineType(),
-          mainLineFn = this._getLineFn(mainLine),
-          contextLineFn= this._getLineFn(contextLine),
-
-          margins = this.get('margins'),
-          contextMargins = this.get('contextMargins'),
-          showLegend = this.get('showLegend'),
-          showTooltip = this.get('showTooltip'),
-
-          xScale = this.get('xScale'),
-          x2Scale = this.get('x2Scale'),
-
-          yScale = this.get('yScale'),
-          y2Scale = this.get('y2Scale'),
-
-          xAxis = this.get('xAxis'),
-          yAxis = this.get('yAxis'),
-          x2Axis = this.get('x2Axis'),
-
-          xGrid = this.get('xGrid'),
-          yGrid = this.get('yGrid'),
-
-          brush = d3.svg.brush(),
-          brushExtent = this.get('brushExtent'),
-
-          timeTickFormatFn = this.get('timeTickFormatFn'),
-          valueTickFormatFn = this.get('valueTickFormatFn'),
-          colorFn = this.get('_colorFn'),
-
-          userOnBrush = this.get('onBrush'),
-          userOnRender = this.get('onRender');
-
-      // Clear the div.
-      $container.empty();
-
-      if (Ember.isEmpty(data)) {
-        return;
-      }
-
-      xDomain = this._getXDomain(data, brushExtent);
-      x2Domain = this._getX2Domain(data);
-      yDomain = this._getYDomain(data, brushExtent, true);
-      y2Domain = this._getYDomain(data, null, false);
-
-      timeTickFormatFn = this._getTimeTickFormatFn(data, xDomain);
-
-      this._addContainer();
-
-      svg = d3.select('#' + elementId + ' svg');
-      g = d3.select('#' + elementId + ' .ev-main');
-
-      if (showLegend) {
-        this._addLegend();
-        var $legendDiv = $('#' + elementId + ' .ev-legend');
-
-        // jQuery can't add the svg and circle elements correctly, so switch to
-        // using d3.
-        var legendDiv = d3.select('#' + elementId + ' .ev-legend');
-        data.forEach(function(elem, index) {
-          var key = elem.key,
-              normalColor = colorFn(elem, index),
-              startingColor = (elem.disabled) ? 'white' : normalColor,
-              div = legendDiv.append('div');
-
-          var circle = div.append('svg')
-            .attr('class', 'ev-svg')
-            .attr('height', 12)
-            .attr('width', 14)
-          .append('circle')
-            .attr('fill', startingColor)
-            .attr('stroke', 'black')
-            .attr('cx', 6)
-            .attr('cy', 6)
-            .attr('r', 5);
-
-          div.append('a')
-            .text(key + ' ');
-
-          function clickCommon() {
-            yDomain = self._getYDomain(data, brushExtent, true);
-            xDomain = self._getXDomain(data, brushExtent);
-
-            xScale.domain(xDomain);
-            yScale.domain(yDomain);
-
-            g.select('.ev-grid.main-y-grid')
-             .call(yGrid);
-            g.select('.ev-axis.main-x-axis')
-             .call(xAxis);
-            g.select('.ev-axis.main-y-axis')
-             .call(yAxis);
-
-            g.selectAll('.ev-chart-line')
-             .attr('d', mainLineFn);
-            self._precomputePointLocations();
-          }
-          div.on('dblclick', function() {
-            // Communicate the disabled status of each element back to the
-            // original data array.
-            userData.setEach('disabled', true);
-            userData[index].disabled = false;
-
-            // Record the disabled status of each element in the internal array.
-            data.setEach('disabled', true);
-            elem.disabled = false;
-
-            legendDiv.selectAll('circle')
-              .attr('fill', 'white');
-            circle.attr('fill', normalColor);
-            clickCommon();
-          });
-          div.on('click', function() {
-            var disabledStatus = (elem.disabled) ? false : true;
-            elem.disabled = disabledStatus;
-            userData[index].disabled = disabledStatus;
-
-            var newColor = (elem.disabled) ? 'white' : normalColor;
-            circle.attr('fill', newColor);
-            clickCommon();
-          });
-        });
-
-        // TODO: CLEAN UP THIS NONSENSE
-        var newHeight = height - $legendDiv.outerHeight();
-        svg.attr('height', newHeight);
-        _mainChartHeight -= $legendDiv.outerHeight();
-        yScale.range([_mainChartHeight, 0]);
-      }
-
-      /******************************
-       * Set up all the components. *
-       ******************************/
-
-      function updateBrushBG() {
-        if (!brush.empty()) {
-          brush.extent(brushExtent);
-        }
-        brushBG
-          .data([brush.empty() ? x2Scale.domain() : brushExtent])
-          .each(function(d) {
-            var leftWidth = x2Scale(d[0]) - x2Scale.range()[0],
-                rightWidth = x2Scale.range()[1] - x2Scale(d[1]);
-            d3.select(this).select('.left')
-              .attr('width', leftWidth < 0 ? 0 : leftWidth);
-
-            d3.select(this).select('.right')
-              .attr('x', x2Scale(d[1]))
-              .attr('width', rightWidth < 0 ? 0 : rightWidth);
-          });
-      }
+          brushExtent = this.get('brushExtent');
 
       function onBrush() {
+        var g = d3.select('#' + elementId + ' .ev-main'),
+            showTooltip = self.get('showTooltip'),
+            userOnBrush = self.get('onBrush');
+
         brushExtent = brush.empty() ? null : brush.extent();
+        self.set('brushExtent', brushExtent);
 
-        xDomain = self._getXDomain(data, brushExtent);
-        yDomain = self._getYDomain(data, brushExtent, true);
-        timeTickFormatFn = self._getTimeTickFormatFn(data, xDomain);
-
-        // Update the scales for the grid and axes.
-        xScale.domain(xDomain);
-        yScale.domain(yDomain);
-
-        xAxis.tickFormat(timeTickFormatFn);
-
-        // Redraw the grid, axes, and lines.
         g.select('.ev-grid.main-x-grid')
-         .call(xGrid);
+         .call(self.get('xGrid'));
         g.select('.ev-grid.main-y-grid')
-         .call(yGrid);
+         .call(self.get('yGrid'));
         g.select('.ev-axis.main-x-axis')
-         .call(xAxis);
+         .call(self.get('xAxis'));
         g.select('.ev-axis.main-y-axis')
-         .call(yAxis);
+         .call(self.get('yAxis'));
         g.select('.ev-chart-lines')
          .selectAll('.ev-chart-line')
-         .attr('d', mainLineFn);
+         .attr('d', self.get('lineFn'));
 
-        updateBrushBG();
+        self._updateBrushBG();
 
         // If we are showing a tooltip, we should recompute the point to pixel
         // coordinates.
@@ -1331,93 +1026,53 @@ $(function() {
         }
       }
 
-      // Taken from crossfilter (http://square.github.com/crossfilter/)
-      function resizePath(d) {
-        var e = +(d === 'e'),
-            x = e ? 1 : -1,
-            y = _contextChartHeight / 3;
-        return 'M' + (0.5 * x) + ',' + y +
-          'A6,6 0 0 ' + e + ' ' + (6.5 * x) + ',' + (y + 6) +
-          'V' + (2 * y - 6) +
-          'A6,6 0 0 ' + e + ' ' + (0.5 * x) + ',' + (2 * y) +
-          'Z'+
-          'M' + (2.5 * x) + ',' + (y + 8) +
-          'V' + (2 * y - 8) +
-          'M' + (4.5 * x) + ',' + (y + 8) +
-          'V' + (2 * y - 8);
-      }
-
-      xScale
-        .domain(xDomain)
-        .range([0, _mainChartWidth]);
-
-      yScale
-        .domain(yDomain)
-        .range([_mainChartHeight, 0]);
-
-      x2Scale
-        .domain(x2Domain)
-        .range([0, _contextChartWidth]);
-
-      y2Scale
-        .domain(y2Domain)
-        .range([_contextChartHeight, 0]);
-
-      xGrid
-        .scale(xScale)
-        .tickSize(-1 * _mainChartHeight, 0, 0);
-      yGrid
-        .scale(yScale)
-        .tickSize(-1 * _mainChartWidth, 0, 0);
-
-      xAxis
-        .scale(xScale)
-        .tickFormat(timeTickFormatFn);
-      yAxis
-        .scale(yScale)
-        .tickFormat(valueTickFormatFn);
-      x2Axis
-        .scale(x2Scale)
-        .tickFormat(timeTickFormatFn);
-
-      mainLine
-        .x(function(d) { return xScale(d.x); })
-        .y(function(d) { return yScale(d.y); });
-      contextLine
-        .x(function(d) { return x2Scale(d.x); })
-        .y(function(d) { return y2Scale(d.y); });
-
-      // Set up the brush.
-      brush
-        .x(x2Scale)
+      brush = d3.svg.brush()
+        .x(this.get('x2Scale'))
         .on('brush', onBrush);
-
       if (brushExtent) {
         brush.extent(brushExtent);
       }
+      return brush;
+    }.property('x2Scale'),
+    _updateBrushBG: function() {
+      var brush = this.get('brush'),
+          brushExtent = this.get('brushExtent'),
+          x2Scale = this.get('x2Scale'),
+          elementId = this.get('elementId');
 
-      /************************
-       * Build the actual UI. *
-       ************************/
-      this._addMainGrid(_mainChartHeight);
-      this._addMainAxes(_mainChartHeight);
-      this._addContextAxis(_mainChartHeight, _contextChartHeight);
+      d3.select('#' + elementId + ' .ev-context-brush-background')
+        .data([brush.empty() ? x2Scale.domain() : brushExtent])
+        .each(function(d) {
+          var leftWidth = x2Scale(d[0]) - x2Scale.range()[0],
+              rightWidth = x2Scale.range()[1] - x2Scale(d[1]);
+          d3.select(this).select('.left')
+            .attr('width', leftWidth < 0 ? 0 : leftWidth);
 
-      this._addChartLines(_mainChartHeight, _mainChartWidth, data, mainLineFn);
-      this._addContextLines(_mainChartHeight, data, contextLineFn);
-
-      if (showTooltip) {
-        this._addTooltip();
-        this._addHoverRect(_mainChartHeight, _mainChartWidth);
-      }
-
+          d3.select(this).select('.right')
+            .attr('x', x2Scale(d[1]))
+            .attr('width', rightWidth < 0 ? 0 : rightWidth);
+        });
+    },
+    _addContextBrush: function() {
+      var contextG,
+          brushBG,
+          gBrush,
+          brushBGenter,
+          elementId = this.get('elementId'),
+          g = d3.select('#' + elementId + ' .ev-main'),
+          _mainChartHeight = this.get('_mainChartHeight'),
+          margins = this.get('margins'),
+          contextMargins = this.get('contextMargins'),
+          _contextChartHeight = this.get('_contextChartHeight'),
+          brush = this.get('brush');
       contextG = g.append('g')
+        .attr('class', 'ev-brush')
         .attr('transform',
               'translate(0,' + (_mainChartHeight + margins.bottom +
                                 contextMargins.top) + ')');
       contextG.append('g')
         .attr('class', 'ev-context-brush-background');
-      contextG.append('g')
+      gBrush = contextG.append('g')
         .attr('class', 'ev-context-brush');
 
       brushBG = contextG.select('.ev-context-brush-background').selectAll('g')
@@ -1438,17 +1093,71 @@ $(function() {
         .attr('y', 0)
         .attr('height', _contextChartHeight);
 
-      gBrush = contextG.select('.ev-context-brush')
+      // Taken from crossfilter (http://square.github.com/crossfilter/)
+      function resizePath(d) {
+        var e = +(d === 'e'),
+            x = e ? 1 : -1,
+            y = _contextChartHeight / 3;
+        return 'M' + (0.5 * x) + ',' + y +
+          'A6,6 0 0 ' + e + ' ' + (6.5 * x) + ',' + (y + 6) +
+          'V' + (2 * y - 6) +
+          'A6,6 0 0 ' + e + ' ' + (0.5 * x) + ',' + (2 * y) +
+          'Z'+
+          'M' + (2.5 * x) + ',' + (y + 8) +
+          'V' + (2 * y - 8) +
+          'M' + (4.5 * x) + ',' + (y + 8) +
+          'V' + (2 * y - 8);
+      }
+      gBrush
         .call(brush);
       gBrush.selectAll('rect')
         .attr('height', _contextChartHeight);
       gBrush.selectAll('.resize').append('path').attr('d', resizePath);
+    },
 
-      onBrush();
+    _render: function() {
+      var shouldRender = this.get('shouldRender'),
+          elementId = this.get('elementId'),
+          data = this.get('_data'),
+          showLegend = this.get('showLegend'),
+          showTooltip = this.get('showTooltip'),
+          userOnRender = this.get('onRender');
+
+      if (!shouldRender) {
+        return;
+      }
+
+      // Clear the div.
+      $('#' + elementId).empty();
+
+      if (Ember.isEmpty(data)) {
+        return;
+      }
+
+      this._addChartContainer();
+
+      if (showLegend) {
+        this._addLegend();
+      }
+
+      this._addMainGrid();
+      this._addMainAxes();
+      this._addContextAxis();
+      this._addChartLines();
+      this._addContextLines();
+
+      if (showTooltip) {
+        this._addTooltip();
+        this._addHoverRect();
+        this._precomputePointLocations();
+      }
+
+      this._addContextBrush();
+
       if (userOnRender) {
         userOnRender();
       }
-    }.observes('_data')
+    }.observes('_data', 'showLegend', 'showTooltip', 'onRender')
   });
 
   Ember.Handlebars.helper('focus-with-context-chart',
