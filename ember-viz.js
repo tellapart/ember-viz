@@ -16,13 +16,21 @@
                         });
       return [minValue, maxValue];
     },
-    overrideDomain: function(range, newRange) {
+    overrideDomain: function(range, newRange, includeZero) {
       if (newRange !== undefined && newRange !== null) {
         if (!isNaN(newRange[0])) {
           range[0] = newRange[0];
         }
         if (!isNaN(newRange[1])) {
           range[1] = newRange[1];
+        }
+      }
+      if (includeZero) {
+        if (range[0] < 0 && range[1] < 0) {
+          range[1] = 0;
+        }
+        if (range[0] > 0 && range[1] > 0) {
+          range[0] = 0;
         }
       }
       return range;
@@ -58,6 +66,7 @@
     legendMargins: {top: 0, right: 50, bottom: 0, left: 50},
     forceY: null,
     forceX: null,
+    includeZero: false,
     showLegend: false,
     legendHeight: 100,
     lineType: d3.svg.line,
@@ -261,7 +270,8 @@
     _getYDomain: function(data) {
       var domain = Ember.EmberViz.Helpers.getDomain(data,
                                                    function(d) { return d.y; });
-      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceY'));
+      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceY'),
+                                                   this.get('includeZero'));
     },
 
     _mainChartHeight: function() {
@@ -1050,7 +1060,7 @@ $(function() {
 
       if (overrideDomain) {
         return Ember.EmberViz.Helpers.overrideDomain(domain,
-                                                     this.get('forceY'));
+                                                     this.get('forceY'), this.get('includeZero'));
       } else {
         return domain;
       }
