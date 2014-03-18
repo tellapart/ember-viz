@@ -2,6 +2,12 @@
   Ember.EmberViz = Ember.Namespace.create();
 })();
 
+var MILLISECONDS_IN_DAY = 86400000;
+var MILLISECONDS_IN_MINUTE = 60000;
+var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
+  ' EmberViz usage details.';
+
+
 (function() {
   Ember.EmberViz.Helpers = Ember.Namespace.create({
     getDomain: function(seriesArray, accessFunction) {
@@ -42,46 +48,17 @@
 })();
 
 (function() {
-  var MILLISECONDS_IN_DAY = 86400000;
-  var MILLISECONDS_IN_MINUTE = 60000;
-  var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
-    ' EmberViz usage details.';
-
-  /*
-   * Basic chart view to display a chart with no tools to manipulate the graph
-   * other than a legend.
-   */
-  Ember.EmberViz.LineChartComponent = Ember.Component.extend({
-
-    /***************************************************************************
-     * Public variables that can be overwritten.
-     **************************************************************************/
-
-    initialize: function() {
-      this.applyUserOptions();
-    }.on('init'),
-
-    classNames: ['ev-line-chart'],
-
-    // Default options. User can override any or all of them by setting an
-    // 'options' attribute upon component creation.
-    tooltipSearchRadius: 10,
+  Ember.EmberViz.BaseComponent = Ember.Component.extend({
     margins: {top: 20, right: 20, bottom: 30, left: 50},
-    legendMargins: {top: 0, right: 50, bottom: 0, left: 50},
-    forceY: null,
-    forceX: null,
-    includeZero: false,
-    showLegend: false,
-    legendHeight: 100,
-    lineType: d3.svg.line,
     shouldRender: false,
+    showTooltip: true,
+    valueFormatFn: d3.format(''),
+    valueTickFormatFn: d3.format('.2s'),
     getX: function(elem) { return elem.x; },
     getY: function(elem) { return elem.y; },
 
-    // User defined callbacks.
-    onRender: null,
-    onClick: null,
-    onMouseMove: null,
+    svgHeight: Ember.computed.alias('height'),
+    svgWidth: Ember.computed.alias('width'),
 
     // Normally, the component chooses its size based on the container size, as
     // the CSS formats it. If CSS doesn't specify a size, then these default
@@ -89,13 +66,180 @@
     // 'width' attributes or apply CSS height and width styles to the div.
     defaultWidth: 600,
     defaultHeightRatio: 0.5,
+
+    initialize: function() {
+      this.applyUserOptions();
+    }.on('init'),
+
+    applyUserOptions: function() {
+      var options = this.getWithDefault('options', Ember.Object.create()),
+          keys = Ember.keys(options);
+
+      // Iterate through each key in the user-provided options and use them in
+      // this chart.
+      keys.forEach(function(elem) {
+        this.set(elem, options.get(elem));
+      }, this);
+
+      this._render();
+    }.observes('options'),
+
+    height: function() {
+      var elementId = this.get('elementId'),
+          $container = $('#' + elementId),
+          height = $container.height(),
+          heightRatio = this.get('defaultHeightRatio'),
+          width = this.get('width');
+
+      if (height === 0) {
+        // The browser didn't determine a height for the div, so fall back to
+        // a height determined by a ratio of the width.
+
+        return heightRatio * width;
+      }
+      return height;
+    }.property('width', 'defaultHeightRatio'),
+
+    width: function() {
+      var elementId = this.get('elementId'),
+          $container = $('#' + elementId),
+          width = $container.width();
+
+      if (width === 0) {
+        // The browser didn't determine a width for the div, so fall back to
+        // a default width.
+        return this.get('defaultWidth');
+      }
+      return width;
+    }.property('defaultWidth'),
+    _mainChartHeight: function() {
+      var height = this.get('svgHeight'),
+          margins = this.get('margins');
+      return height - margins.top - margins.bottom;
+    }.property('svgHeight', 'margins'),
+    _mainChartWidth: function() {
+      var width = this.get('svgWidth'),
+          margins = this.get('margins');
+      return width - margins.right - margins.left;
+    }.property('width', 'margins'),
+
+    _addChartContainer: function() {
+
+      // Hack to force the component to compute the height only when the main
+      //  div is empty.
+      this.notifyPropertyChange('height');
+      this.get('height');
+
+      var elementId = this.get('elementId'),
+          margins = this.get('margins'),
+          height = this.get('svgHeight');
+
+      // Add and size the main svg element for the chart and create the main 'g'
+      // container for all of the chart components.
+      d3.select('#' + elementId).insert('svg', '#' + elementId + ' .ev-legend')
+        .attr('class', 'ev-svg')
+        .attr('width', this.get('width'))
+        .attr('height', height)
+      .append('g')
+        .attr('class', 'ev-main')
+        .attr('transform',
+              'translate(' + margins.left + ',' + margins.top + ')');
+    },
+    _addMainAxes: function() {
+      var g = d3.select('#' + this.get('elementId') + ' .ev-main');
+      g.append('g')
+       .attr('class', 'ev-axis main-x-axis')
+       .attr('transform', 'translate(0,' + this.get('_mainChartHeight') + ')')
+       .call(this.get('xAxis'));
+      g.append('g')
+       .attr('class', 'ev-axis main-y-axis')
+       .call(this.get('yAxis'));
+    },
+    _addTooltip: function() {
+      var elementId = this.get('elementId'),
+          $container = $('#' + elementId);
+
+      // Create and add the tooltip div.
+      var $tooltipDiv = $('<div>').addClass('ev-chart-tooltip');
+      $container.append($tooltipDiv);
+
+      // Add a circle for use with the tooltip.
+      d3.select('#' + elementId + ' .ev-main')
+        .append('circle')
+        .attr('class', 'ev-tooltip-circle')
+        .attr('cx', 0)
+        .attr('cy', 0)
+        .attr('r', 5);
+    },
+    _handleMouseOut: function() {
+      var elementId = this.get('elementId');
+      return function() {
+        // Hide the tooltip.
+        $('#' + elementId + ' .ev-chart-tooltip')
+          .css('display', 'none');
+
+        // Hide the tooltip circle.
+        d3.select('#' + elementId + ' .ev-tooltip-circle')
+          .style('display', 'none');
+      };
+    }.property(),
+    colorFn: function() {
+      var colors = d3.scale.category20().range();
+      return function(d, i) { return d.color || colors[i % colors.length]; };
+    }.property(),
+
+    didInsertElement: function() {
+      var self = this;
+
+      function resize() {
+        self.notifyPropertyChange('height');
+        self.notifyPropertyChange('width');
+        self._render();
+      }
+
+      // Re-render the chart when the window is resized.
+      $(window).resize(function() {
+        Ember.run(resize);
+      });
+      this.set('shouldRender', true);
+      resize();
+    },
+
+    _render: function() {
+    },
+  });
+
+  /*
+   * Basic chart view to display a chart with no tools to manipulate the graph
+   * other than a legend.
+   */
+  Ember.EmberViz.LineChartComponent = Ember.EmberViz.BaseComponent.extend({
+
+    /***************************************************************************
+     * Public variables that can be overwritten.
+     **************************************************************************/
+
+    classNames: ['ev-line-chart'],
+
+    // Default options. User can override any or all of them by setting an
+    // 'options' attribute upon component creation.
+    tooltipSearchRadius: 10,
+    legendMargins: {top: 0, right: 50, bottom: 0, left: 50},
+    forceY: null,
+    forceX: null,
+    includeZero: false,
+    showLegend: false,
+    legendHeight: 100,
+    lineType: d3.svg.line,
+
+    // User defined callbacks.
+    onRender: null,
+    onClick: null,
+    onMouseMove: null,
+
     _legendActualHeight: 0,
 
-    showTooltip: true,
     timeFormatter: d3.time.format.utc,
-
-    valueFormatFn: d3.format(''),
-    valueTickFormatFn: d3.format('.2s'),
 
     line: function() {
       var xScale = this.get('xScale'),
@@ -125,59 +269,9 @@
         .tickSize(-1 * this.get('_mainChartWidth'), 0, 0);
     }.property('yScale', '_mainChartWidth'),
 
-    applyUserOptions: function() {
-      var options = this.getWithDefault('options', Ember.Object.create()),
-          keys = Ember.keys(options);
-
-      // Iterate through each key in the user-provided options and use them in
-      // this chart.
-      keys.forEach(function(elem) {
-        this.set(elem, options.get(elem));
-      }, this);
-
-      this._render();
-    }.observes('options'),
-
-    height: function() {
-      var elementId = this.get('elementId'),
-          $container = $('#' + elementId),
-          height = $container.height(),
-          heightRatio = this.get('defaultHeightRatio'),
-          width = this.get('width');
-
-      if (height === 0) {
-        // The browser didn't determine a height for the div, so fall back to
-        // a default height.
-
-        return heightRatio * width;
-      }
-      return height;
-    }.property('width', 'defaultHeightRatio'),
-    width: function() {
-      var elementId = this.get('elementId'),
-          $container = $('#' + elementId),
-          width = $container.width();
-
-      if (width === 0) {
-        // The browser didn't determine a width for the div, so fall back to
-        // a default width.
-        return this.get('defaultWidth');
-      }
-      return width;
-    }.property('defaultWidth'),
     svgHeight: function() {
       return this.get('height') - this.get('_legendActualHeight');
     }.property('height', '_legendActualHeight'),
-    _mainChartHeight: function() {
-      var height = this.get('svgHeight'),
-          margins = this.get('margins');
-      return height - margins.top - margins.bottom;
-    }.property('svgHeight', 'margins'),
-    _mainChartWidth: function() {
-      var width = this.get('width'),
-          margins = this.get('margins');
-      return width - margins.right - margins.left;
-    }.property('width', 'margins'),
     timeFormatFn: function() {
       var data = this.get('_data'),
           timeFormatter = this.get('timeFormatter'),
@@ -264,7 +358,7 @@
       var data = this.get('_data'),
           domain = Ember.EmberViz.Helpers.getDomain(data,
                                                    function(d) { return d.y; });
-      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceY'), this.get('includeZero');
+      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceY'), this.get('includeZero'));
     }.property('_data.@each.disabled', 'forceY', 'includeZero'),
     _getAverageGranularity: function(data) {
       var count = 0;
@@ -280,10 +374,6 @@
       });
       return total / count;
     },
-    colorFn: function() {
-      var colors = d3.scale.category20().range();
-      return function(d, i) { return d.color || colors[i % colors.length]; };
-    }.property(),
     _data: function() {
       var result = [],
           data = this.get('data'),
@@ -312,7 +402,6 @@
           var valuesCopy = series.values.map(function(elem) {
             var x,
                 y,
-                // scaledX,
                 xError = 'Could not extract a valid datapoint using' +
                   ' the supplied "getX" function.' + SEE_DOCUMENTATION_MSG,
                 yError = 'Could not extract a valid datapoint using' +
@@ -457,8 +546,7 @@
             $tooltipDiv = $('#' + elementId + ' .ev-chart-tooltip'),
             tooltipCircle = d3.select('#' + elementId + ' .ev-tooltip-circle'),
             closestPointInfo = self._findClosestPoint(self.get('_data'), xPosition,
-                                                      yPosition),
-            userMouseMove = self.get('onMouseMove');
+                                                      yPosition);
 
         // If a closest point was found inside the appropriate radius,
         // display information about that point.
@@ -509,7 +597,7 @@
               return d3.interpolate(a, 0.8);
             });
 
-          if (userMouseMove) {
+          if (self.onMouseMove instanceof Function) {
             if (closestPoint) {
               closestPointPosition = {
                 x: closestPoint.xPx,
@@ -520,7 +608,7 @@
                 y: closestPoint.y
               };
             }
-            userMouseMove(
+            self.onMouseMove(
               {x: position[0], y: position[1]},
               closestPointPosition,
               closestPointValues);
@@ -535,18 +623,6 @@
         }
       };
     }.property(),
-    _handleMouseOut: function() {
-      var elementId = this.get('elementId');
-      return function() {
-        // Hide the tooltip.
-        $('#' + elementId + ' .ev-chart-tooltip')
-          .css('display', 'none');
-
-        // Hide the tooltip circle.
-        d3.select('#' + elementId + ' .ev-tooltip-circle')
-          .style('display', 'none');
-      };
-    }.property(),
     _handleMouseClick: function() {
       var self = this;
 
@@ -557,57 +633,25 @@
             xPosition = position[0],
             yPosition = position[1],
             closestPointInfo = self._findClosestPoint(self.get('_data'), xPosition,
-                                                      yPosition),
-            userOnClick = self.get('onClick');
+                                                      yPosition);
         clickPosition = {
           x: position[0],
           y: position[1]
         };
         // If a closest point was found inside the appropriate radius, pass the
         // location and data to the user provided callback;
-        if (userOnClick) {
+        if (self.onClick instanceof Function) {
           if (closestPointInfo) {
             closestPoint = closestPointInfo.point;
-            userOnClick(clickPosition,
-                        {x: closestPoint.xPx, y: closestPoint.yPx},
-                        {x: closestPoint.x, y: closestPoint.y});
+            self.onClick(clickPosition,
+                         {x: closestPoint.xPx, y: closestPoint.yPx},
+                         {x: closestPoint.x, y: closestPoint.y});
           } else {
-            userOnClick(clickPosition, null, null);
+            self.onClick(clickPosition, null, null);
           }
         }
       };
     }.property(),
-    didInsertElement: function() {
-      var self = this;
-
-      function resize() {
-        self.notifyPropertyChange('height');
-        self.notifyPropertyChange('width');
-        self._render();
-      }
-
-      // Re-render the chart when the window is resized.
-      $(window).resize(function() {
-        Ember.run(resize);
-      });
-      this.set('shouldRender', true);
-      resize();
-    },
-    _addChartContainer: function() {
-      var elementId = this.get('elementId'),
-          margins = this.get('margins');
-
-      // Add and size the main svg element for the chart and create the main 'g'
-      // container for all of the chart components.
-      d3.select('#' + elementId).insert('svg', '#' + elementId + ' .ev-legend')
-        .attr('class', 'ev-svg')
-        .attr('width', this.get('width'))
-        .attr('height', this.get('svgHeight'))
-      .append('g')
-        .attr('class', 'ev-main')
-        .attr('transform',
-              'translate(' + margins.left + ',' + margins.top + ')');
-    },
     clickCommon: function() {
       var g = d3.select('#' + this.get('elementId') + ' .ev-main');
       g.select('.ev-grid.main-y-grid')
@@ -701,22 +745,6 @@
       this.set('_legendActualHeight', $legendDiv.outerHeight());
     },
 
-    _addTooltip: function() {
-      var elementId = this.get('elementId'),
-          $container = $('#' + elementId);
-
-      // Create and add the tooltip div.
-      var $tooltipDiv = $('<div>').addClass('ev-chart-tooltip');
-      $container.append($tooltipDiv);
-
-      // Add a circle for use with the tooltip.
-      d3.select('#' + elementId + ' .ev-main')
-        .append('circle')
-        .attr('class', 'ev-tooltip-circle')
-        .attr('cx', 0)
-        .attr('cy', 0)
-        .attr('r', 5);
-    },
     _addHoverRect: function() {
       // Add an invisible rectangle to detect mouse movements.
       d3.select('#' + this.get('elementId') + ' .ev-main')
@@ -751,16 +779,6 @@
         .attr('d', this.get('lineFn'))
         .style('stroke', this.get('colorFn'));
     },
-    _addMainAxes: function() {
-      var g = d3.select('#' + this.get('elementId') + ' .ev-main');
-      g.append('g')
-       .attr('class', 'ev-axis main-x-axis')
-       .attr('transform', 'translate(0,' + this.get('_mainChartHeight') + ')')
-       .call(this.get('xAxis'));
-      g.append('g')
-       .attr('class', 'ev-axis main-y-axis')
-       .call(this.get('yAxis'));
-    },
     _addMainGrid: function() {
       var g = d3.select('#' + this.get('elementId') + ' .ev-main');
       g.append('g')
@@ -780,8 +798,7 @@
       var shouldRender = this.get('shouldRender'),
           data = this.get('_data'),
           showLegend = this.get('showLegend'),
-          showTooltip = this.get('showTooltip'),
-          userOnRender = this.get('onRender');
+          showTooltip = this.get('showTooltip');
 
       if (!shouldRender) {
         return;
@@ -813,8 +830,8 @@
       }
 
       // If the user supplied an onRender callback, call it.
-      if (userOnRender) {
-        userOnRender();
+      if (this.onRender instanceof Function) {
+        this.onRender();
       }
     }.observes('_data')
   });
@@ -994,8 +1011,7 @@ $(function() {
 
       function onBrush() {
         var g = d3.select('#' + elementId + ' .ev-main'),
-            showTooltip = self.get('showTooltip'),
-            userOnBrush = self.get('onBrush');
+            showTooltip = self.get('showTooltip');
 
         brushExtent = brush.empty() ? null : brush.extent();
         self.set('brushExtent', brushExtent);
@@ -1021,8 +1037,8 @@ $(function() {
         }
 
         // If the user supplied an onbrush callback, call it.
-        if (userOnBrush) {
-          userOnBrush(brushExtent);
+        if (self.onBrush instanceof Function) {
+          self.onBrush(brushExtent);
         }
       }
 
@@ -1120,8 +1136,7 @@ $(function() {
           elementId = this.get('elementId'),
           data = this.get('_data'),
           showLegend = this.get('showLegend'),
-          showTooltip = this.get('showTooltip'),
-          userOnRender = this.get('onRender');
+          showTooltip = this.get('showTooltip');
 
       if (!shouldRender) {
         return;
@@ -1154,12 +1169,284 @@ $(function() {
 
       this._addContextBrush();
 
-      if (userOnRender) {
-        userOnRender();
+      if (this.onRender instanceof Function) {
+        this.onRender();
       }
     }.observes('_data', 'showLegend', 'showTooltip', 'onRender')
   });
 
   Ember.Handlebars.helper('focus-with-context-chart',
                           Ember.EmberViz.FocusWithContextChartComponent);
+});
+// TODO: Build the Area Chart Component
+// $(function() {
+//   Ember.EmberViz.AreaChartComponent = Ember.EmberViz.BaseComponent.extend({
+//
+//   });
+//
+//   Ember.Handlebars.helper('area-chart', Ember.EmberViz.AreaChartComponent);
+// });
+$(function() {
+  Ember.EmberViz.BarChartComponent = Ember.EmberViz.BaseComponent.extend({
+    stacked: true,
+
+    xScale: function() {
+      return d3.scale.ordinal()
+        .domain(this.get('xDomain'))
+        .rangeRoundBands([0, this.get('_mainChartWidth')], 0.08);
+    }.property('xDomain', '_mainChartWidth'),
+
+    yScale: function() {
+      return d3.scale.linear()
+        .domain(this.get('yDomain'))
+        .range([this.get('_mainChartHeight'), 0]);
+    }.property('yDomain', '_mainChartHeight'),
+
+    xDomain: function() {
+      var data = this.get('_data'),
+          domainSet = new Ember.Set();
+
+      if (data.length === 0) {
+        return [];
+      }
+
+      data.forEach(function(series) {
+        domainSet.addEach(series.get('values').getEach('x'));
+      });
+
+      return domainSet.toArray();
+    }.property('_data.@each'),
+
+    yDomain: function() {
+      var maxY,
+          data = this.get('_data');
+      maxY = d3.max(data, function(series) {
+        return d3.max(series.values, function(elem) {
+          return elem.y0 + elem.y;
+        });
+      });
+      return [0, maxY];
+    }.property('_data.@each', 'stacked'),
+
+    xAxis: function() {
+      return d3.svg.axis()
+        .scale(this.get('xScale'))
+        .tickSize(0)
+        .tickPadding(6);
+    }.property('xScale'),
+
+    yAxis: function() {
+      return d3.svg.axis().orient('left').scale(this.get('yScale')).tickFormat(this.get('valueTickFormatFn'));
+      // return d3.svg.axis().orient('left').scale(this.get('yScale'));
+    }.property('yScale', 'valueTickFormatFn'),
+
+    _data: function() {
+      window.cool = this;
+      var result = [],
+          data = this.get('data'),
+          getX = this.get('getX'),
+          getY = this.get('getY');
+
+      // Verify that the getX and getY attributes are functions.
+      if (typeof getX !== 'function') {
+        console.error('Provided "getX" attribute is not a valid function. ', SEE_DOCUMENTATION_MSG);
+        return result;
+      }
+      if (typeof getY !== 'function') {
+        console.error('Provided "getY" attribute is not a valid function. ', SEE_DOCUMENTATION_MSG);
+        return result;
+      }
+
+      // Verify that the data attribute is valid and that it has a map function.
+      if (!data || typeof data.map !== 'function') {
+        return result;
+      }
+
+      // Make a deep copy of data to avoid manipulating the controller's clean
+      // data.
+      try {
+        if (data.length === 0) {
+          return [];
+        }
+        var seriesLength = data[0].values.length;
+        data.forEach(function(series) {
+          if (series.values.length !== seriesLength) {
+            throw "All series don't have the same length." + SEE_DOCUMENTATION_MSG;
+          }
+        });
+        result = data.map(function(series) {
+          var valuesCopy = series.values.map(function(elem) {
+            var x,
+                y,
+                xError = 'Could not extract a valid datapoint using' +
+                  ' the supplied "getX" function.' + SEE_DOCUMENTATION_MSG,
+                yError = 'Could not extract a valid datapoint using' +
+                  ' the supplied "getY" function.' + SEE_DOCUMENTATION_MSG;
+
+            // Use the getX and getY functions to extract the x and y values from
+            // each datapoint.
+            try {
+              x = getX(elem);
+            } catch (e) {
+              throw xError;
+            }
+            try {
+              y = getY(elem);
+            } catch (e) {
+              throw yError;
+            }
+
+            return {
+              x: x,
+              y: y,
+              original: elem
+            };
+          });
+
+          return Ember.Object.create({
+            key: series.key,
+            values: valuesCopy,
+            disabled: series.disabled
+          });
+        });
+      } catch(e) {
+        console.error(e);
+        return result;
+      }
+
+      // TODO: Verify that all series have the same x-vals in the same order OR
+      //  normalize them so that they do.
+
+
+      // Calculate the y0 for each series.
+      result.forEach(function(series, seriesIndex) {
+
+        series.get('values').forEach(function(elem, elemIndex) {
+
+          // TODO: Make this smarter if the y is negative.
+          if (seriesIndex === 0) {
+            elem.y0 = 0;
+          } else {
+            var prevElement = result[seriesIndex - 1].values[elemIndex];
+            elem.y0 = prevElement.y0 + prevElement.y;
+          }
+        });
+      });
+
+      return result;
+    }.property('data.[]', 'getX', 'getY'),
+
+    _addBarLines: function() {
+      var elementId = this.get('elementId'),
+          data = this.get('_data'),
+          colorFn = this.get('colorFn'),
+          xScale = this.get('xScale'),
+          yScale = this.get('yScale'),
+          height = this.get('_mainChartHeight'),
+          g = d3.select('#' + elementId + ' .ev-main');
+
+      var layer = g.selectAll('.layer')
+          .data(data)
+        .enter()
+          .append('g')
+          .attr('class', 'layer')
+          .style("fill", colorFn);
+
+      var rect = layer.selectAll('rect')
+          .data(function(d) { return d.values; })
+        .enter()
+          .append('rect')
+          .attr('x', function(d) { return xScale(d.x); })
+          .attr('y', height)
+          .attr('width', xScale.rangeBand())
+          .attr('height', 0)
+          .on('mousemove', this.get('_handleMouseMove'))
+          .on('mouseout', this.get('_handleMouseOut'));
+
+      rect.transition()
+        .delay(function(d, i) { return i * 10; })
+        .attr('y', function(d) { return yScale(d.y0 + d.y); })
+        .attr('height', function(d) { return yScale(d.y0) - yScale(d.y0 + d.y); });
+
+    },
+    tooltipContentFn: function() {
+      var valueFormatFn = this.get('valueFormatFn');
+
+      return function(x, y, elem, seriesName) {
+        return '<h5>' + seriesName + '</h5>' +
+               '<hr />' +
+               '<p>' + valueFormatFn(y) + ' for ' + x + '</p>';
+      };
+
+    }.property('valueFormatFn'),
+
+    _handleMouseMove: function() {
+      var self = this,
+          elementId = this.get('elementId');
+
+      return function() {
+        var newLeft,
+            newTop,
+            widthPastWindow,
+            margins = self.get('margins'),
+            position = d3.mouse(this),
+            xPosition = position[0],
+            yPosition = position[1],
+            $tooltipDiv = $('#' + elementId + ' .ev-chart-tooltip'),
+            elemInfo = d3.event.target.__data__,
+            parentInfo = d3.event.target.parentNode.__data__,
+            html = self.get('tooltipContentFn')(elemInfo.x, elemInfo.y, elemInfo,
+                                                parentInfo.get('key'));
+
+        // Update the tooltipDiv contents.
+        $tooltipDiv.html(html);
+
+        // Move the tooltip div near the closest point.
+        newLeft = margins.left + xPosition;
+        newTop = yPosition - $tooltipDiv.height() + margins.top;
+        $tooltipDiv
+          .css('display', 'inline')
+          .css('left', newLeft)
+          .css('top', newTop);
+
+        // Determine if the new location of the tooltip goes off the window
+        // and move it inside the window if that's the case.
+        widthPastWindow = ($tooltipDiv.offset().left + $tooltipDiv.width()) -
+          $('body').width();
+        if (widthPastWindow > 0) {
+          $tooltipDiv.css('left', newLeft - widthPastWindow);
+        }
+      };
+    }.property(),
+
+    _render: function() {
+      var shouldRender = this.get('shouldRender'),
+          elementId = this.get('elementId'),
+          data = this.get('_data'),
+          showTooltip = this.get('showTooltip');
+
+      if (!shouldRender) {
+        return;
+      }
+
+      // Clear the div.
+      $('#' + elementId).empty();
+
+      if (Ember.isEmpty(data)) {
+        return;
+      }
+
+      this._addChartContainer();
+      this._addMainAxes();
+      this._addBarLines();
+
+      if (showTooltip) {
+        this._addTooltip();
+      }
+
+
+    }
+  });
+
+  Ember.Handlebars.helper('bar-chart', Ember.EmberViz.BarChartComponent);
 });

@@ -3,7 +3,8 @@
     "$",
     "d3",
     "Ember",
-    "window"
+    "window",
+    "console"
   ],
 
   "curly": true,
