@@ -7,7 +7,6 @@ var MILLISECONDS_IN_MINUTE = 60000;
 var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
   ' EmberViz usage details.';
 
-
 (function() {
   Ember.EmberViz.Helpers = Ember.Namespace.create({
     getDomain: function(seriesArray, accessFunction) {
@@ -50,15 +49,20 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
 (function() {
   Ember.EmberViz.BaseComponent = Ember.Component.extend({
     margins: {top: 20, right: 20, bottom: 30, left: 50},
+    contextMargins: {top: 10, right: 20, bottom: 30, left: 50},
     shouldRender: false,
     showTooltip: true,
+    showContext: false,
     valueFormatFn: d3.format(''),
     valueTickFormatFn: d3.format('.2s'),
+    timeFormatter: d3.time.format.utc,
     getX: function(elem) { return elem.x; },
     getY: function(elem) { return elem.y; },
 
     svgHeight: Ember.computed.alias('height'),
     svgWidth: Ember.computed.alias('width'),
+    contextWidth: Ember.computed.alias('width'),
+    contextHeight: 70,
 
     // Normally, the component chooses its size based on the container size, as
     // the CSS formats it. If CSS doesn't specify a size, then these default
@@ -85,9 +89,7 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
     }.observes('options'),
 
     height: function() {
-      var elementId = this.get('elementId'),
-          $container = $('#' + elementId),
-          height = $container.height(),
+      var height = this.$().height(),
           heightRatio = this.get('defaultHeightRatio'),
           width = this.get('width');
 
@@ -101,9 +103,7 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
     }.property('width', 'defaultHeightRatio'),
 
     width: function() {
-      var elementId = this.get('elementId'),
-          $container = $('#' + elementId),
-          width = $container.width();
+      var width = this.$().width();
 
       if (width === 0) {
         // The browser didn't determine a width for the div, so fall back to
@@ -113,15 +113,29 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
       return width;
     }.property('defaultWidth'),
     _mainChartHeight: function() {
-      var height = this.get('svgHeight'),
-          margins = this.get('margins');
-      return height - margins.top - margins.bottom;
-    }.property('svgHeight', 'margins'),
+      var margins = this.get('margins');
+      if (this.get('showContext')) {
+        return this.get('svgHeight') - this.get('contextHeight') - margins.top - margins.bottom;
+      }
+      return this.get('svgHeight') - margins.top - margins.bottom;
+    }.property('svgHeight', 'contextHeight', 'margins', 'showContext'),
     _mainChartWidth: function() {
       var width = this.get('svgWidth'),
           margins = this.get('margins');
       return width - margins.right - margins.left;
     }.property('width', 'margins'),
+    _contextChartHeight: function() {
+      var margins = this.get('contextMargins');
+
+      if (!this.get('showContext')) {
+        return 0;
+      }
+      return this.get('contextHeight') - margins.bottom - margins.top;
+    }.property('showContext', 'contextHeight', 'contextMargins'),
+    _contextChartWidth: function() {
+      var margins = this.get('contextMargins');
+      return this.get('contextWidth') - margins.left - margins.right;
+    }.property('contextWidth', 'contextMargins'),
 
     _addChartContainer: function() {
 
@@ -156,12 +170,11 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
        .call(this.get('yAxis'));
     },
     _addTooltip: function() {
-      var elementId = this.get('elementId'),
-          $container = $('#' + elementId);
+      var elementId = this.get('elementId');
 
       // Create and add the tooltip div.
       var $tooltipDiv = $('<div>').addClass('ev-chart-tooltip');
-      $container.append($tooltipDiv);
+      this.$().append($tooltipDiv);
 
       // Add a circle for use with the tooltip.
       d3.select('#' + elementId + ' .ev-main')
@@ -183,10 +196,77 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
           .style('display', 'none');
       };
     }.property(),
+    _updateBrushBG: function() {
+      var brush = this.get('brush'),
+          brushExtent = this.get('brushExtent'),
+          x2Scale = this.get('x2Scale'),
+          elementId = this.get('elementId');
+
+      d3.select('#' + elementId + ' .ev-context-brush-background')
+        .data([brush.empty() ? x2Scale.domain() : brushExtent])
+        .each(function(d) {
+          var leftWidth = x2Scale(d[0]) - x2Scale.range()[0],
+              rightWidth = x2Scale.range()[1] - x2Scale(d[1]);
+          d3.select(this).select('.left')
+            .attr('width', leftWidth < 0 ? 0 : leftWidth);
+
+          d3.select(this).select('.right')
+            .attr('x', x2Scale(d[1]))
+            .attr('width', rightWidth < 0 ? 0 : rightWidth);
+        });
+    },
     colorFn: function() {
       var colors = d3.scale.category20().range();
       return function(d, i) { return d.color || colors[i % colors.length]; };
     }.property(),
+    xDomain: function() {
+      var brushExtent = this.get('brushExtent'),
+          domain = Ember.EmberViz.Helpers.getDomain(this.get('_data'), function(d) { return d.x; });
+      if (this.get('showContext') && !Ember.isNone(brushExtent)) {
+        domain = brushExtent;
+      }
+      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
+    }.property('_data', 'showContext', 'brushExtent', 'forceX'),
+    yDomain: function() {
+      var domain,
+          data = this.get('_data'),
+          brushExtent = this.get('brushExtent');
+
+      // If there is a brushExtent, we should restrict the y domain to the
+      // points within the brushExtent timespan.
+      if (this.get('showContext') && !Ember.isNone(brushExtent)) {
+        var minValue = null,
+            maxValue = null,
+            enabledSeries = data.rejectBy('disabled');
+
+        enabledSeries.forEach(function(series) {
+          series.values.forEach(function(point) {
+
+            if (point.x >= brushExtent[0] && point.x <= brushExtent[1]) {
+              if (minValue === null || point.y < minValue) {
+                minValue = point.y;
+              }
+              if (maxValue === null || point.y > maxValue) {
+                maxValue = point.y;
+              }
+            }
+          });
+        });
+        domain = [minValue, maxValue];
+      } else {
+        domain = Ember.EmberViz.Helpers.getDomain(data,
+                                                   function(d) { return d.y; });
+      }
+      return Ember.EmberViz.Helpers.overrideDomain(domain,
+                                                   this.get('forceY'),
+                                                   this.get('includeZero'));
+    }.property('_data.@each.disabled', 'showContext', 'brushExtent', 'forceY', 'includeZero'),
+    xAxis: function() {
+      return d3.svg.axis().orient('bottom').ticks(7).scale(this.get('xScale')).tickFormat(this.get('timeTickFormatFn'));
+    }.property('xScale', 'timeTickFormatFn'),
+    yAxis: function() {
+      return d3.svg.axis().orient('left').ticks(5).scale(this.get('yScale')).tickFormat(this.get('valueTickFormatFn'));
+    }.property('yScale', 'valueTickFormatFn'),
 
     didInsertElement: function() {
       var self = this;
@@ -239,8 +319,6 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
 
     _legendActualHeight: 0,
 
-    timeFormatter: d3.time.format.utc,
-
     line: function() {
       var xScale = this.get('xScale'),
           yScale = this.get('yScale');
@@ -254,12 +332,6 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
     yScale: function() {
       return d3.scale.linear().domain(this.get('yDomain')).range([this.get('_mainChartHeight'), 0]);
     }.property('yDomain', '_mainChartHeight'),
-    xAxis: function() {
-      return d3.svg.axis().orient('bottom').ticks(7).scale(this.get('xScale')).tickFormat(this.get('timeTickFormatFn'));
-    }.property('xScale', 'timeTickFormatFn'),
-    yAxis: function() {
-      return d3.svg.axis().orient('left').scale(this.get('yScale')).tickFormat(this.get('valueTickFormatFn'));
-    }.property('yScale', 'valueTickFormatFn'),
     xGrid: function() {
       return d3.svg.axis().orient('bottom').ticks(7).tickFormat('').scale(this.get('xScale'))
         .tickSize(-1 * this.get('_mainChartHeight'), 0, 0);
@@ -272,26 +344,6 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
     svgHeight: function() {
       return this.get('height') - this.get('_legendActualHeight');
     }.property('height', '_legendActualHeight'),
-    timeFormatFn: function() {
-      var data = this.get('_data'),
-          timeFormatter = this.get('timeFormatter'),
-          avgGranularity = this._getAverageGranularity(data);
-
-      // If the average granularity is around or greater than one point per day,
-      // only show month and date.
-      if (avgGranularity >= 0.85 * MILLISECONDS_IN_DAY) {
-        return timeFormatter('%m/%d');
-      }
-
-      // If the average granularity is less than a minute, show the month, date,
-      // hour, minute, and second.
-      if (avgGranularity <= MILLISECONDS_IN_MINUTE) {
-        return timeFormatter('%m/%d %H:%M:%S');
-      }
-
-      // Otherwise, show month, date, hour, and minute.
-      return timeFormatter('%m/%d %H:%M');
-    }.property('_data', 'timeFormatter'),
 
     tooltipContentFn: function() {
       var valueFormatFn = this.get('valueFormatFn'),
@@ -319,6 +371,27 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
     /***************************************************************************
      * Private variables and functions that should not be overwritten.
      **************************************************************************/
+
+    timeFormatFn: function() {
+      var data = this.get('_data'),
+          timeFormatter = this.get('timeFormatter'),
+          avgGranularity = this._getAverageGranularity(data);
+
+      // If the average granularity is around or greater than one point per day,
+      // only show month and date.
+      if (avgGranularity >= 0.85 * MILLISECONDS_IN_DAY) {
+        return timeFormatter('%m/%d');
+      }
+
+      // If the average granularity is less than a minute, show the month, date,
+      // hour, minute, and second.
+      if (avgGranularity <= MILLISECONDS_IN_MINUTE) {
+        return timeFormatter('%m/%d %H:%M:%S');
+      }
+
+      // Otherwise, show month, date, hour, and minute.
+      return timeFormatter('%m/%d %H:%M');
+    }.property('_data', 'timeFormatter'),
 
     timeTickFormatFn: function() {
       var data = this.get('_data'),
@@ -348,18 +421,7 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
       // In the scope of less than a day, show the time without the date.
       return timeFormatter('%H:%M');
     }.property('_data', 'xDomain', 'timeFormatter'),
-    xDomain: function() {
-      var data = this.get('_data'),
-          domain = Ember.EmberViz.Helpers.getDomain(data,
-                                                   function(d) { return d.x; });
-      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
-    }.property('_data.@each.disabled', 'forceX'),
-    yDomain: function() {
-      var data = this.get('_data'),
-          domain = Ember.EmberViz.Helpers.getDomain(data,
-                                                   function(d) { return d.y; });
-      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceY'), this.get('includeZero'));
-    }.property('_data.@each.disabled', 'forceY', 'includeZero'),
+
     _getAverageGranularity: function(data) {
       var count = 0;
       var total = 0;
@@ -543,7 +605,7 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
             position = d3.mouse(this),
             xPosition = position[0],
             yPosition = position[1],
-            $tooltipDiv = $('#' + elementId + ' .ev-chart-tooltip'),
+            $tooltipDiv = self.$(' .ev-chart-tooltip'),
             tooltipCircle = d3.select('#' + elementId + ' .ev-tooltip-circle'),
             closestPointInfo = self._findClosestPoint(self.get('_data'), xPosition,
                                                       yPosition);
@@ -671,7 +733,6 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
           legendMargins = this.get('legendMargins'),
           data = this.get('_data'),
           colorFn = this.get('colorFn'),
-          $container = $('#' + elementId),
           $legendDiv = $('<div class="ev-legend">')
             .css('max-height', this.get('legendHeight'))
             .css('margin-top', legendMargins.top)
@@ -679,7 +740,7 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
             .css('margin-bottom', legendMargins.bottom)
             .css('margin-left', legendMargins.left);
 
-      $container.append($legendDiv);
+      this.$().append($legendDiv);
 
       // jQuery can't add the svg and circle elements correctly, so switch to
       // using d3.
@@ -795,27 +856,23 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
         .attr('height', this.get('svgHeight'));
     }.observes('svgHeight'),
     _render: function() {
-      var shouldRender = this.get('shouldRender'),
-          data = this.get('_data'),
-          showLegend = this.get('showLegend'),
-          showTooltip = this.get('showTooltip');
 
-      if (!shouldRender) {
+      if (!this.get('shouldRender')) {
         return;
       }
 
       // Clear the div.
-      $('#' + this.get('elementId')).empty();
+      this.$().empty();
 
       // TODO: replace this with some computed property so we don't need data in
       // the render function.
-      if (Ember.isEmpty(data)) {
+      if (Ember.isEmpty(this.get('_data'))) {
         return;
       }
 
       this._addChartContainer();
 
-      if (showLegend) {
+      if (this.get('showLegend')) {
         this._addLegend();
       }
 
@@ -823,17 +880,23 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
       this._addMainAxes();
       this._addChartLines();
 
-      if (showTooltip) {
+      if (this.get('showTooltip')) {
         this._addTooltip();
         this._addHoverRect();
         this._precomputePointLocations();
+      }
+
+      if (this.get('showContext')) {
+        this._addContextAxis();
+        this._addContextLines();
+        this._addContextBrush();
       }
 
       // If the user supplied an onRender callback, call it.
       if (this.onRender instanceof Function) {
         this.onRender();
       }
-    }.observes('_data')
+    }.observes('_data', 'showLegend', 'showTooltip', 'onRender')
   });
 
   Ember.Handlebars.helper('line-chart', Ember.EmberViz.LineChartComponent);
@@ -845,11 +908,7 @@ $(function() {
 
     classNames: ['ev-focus-with-context-chart'],
     brushExtent: null,
-    defaultHeight: 400,
-    defaultWidth: 600,
-    contextHeight: 70,
-    contextWidth: Ember.computed.alias('width'),
-    contextMargins: {top: 10, right: 20, bottom: 30, left: 50},
+    showContext: true,
 
     // User defined callbacks.
     onBrush: null,
@@ -880,94 +939,18 @@ $(function() {
       return d3.svg.axis().orient('bottom').ticks(7).scale(this.get('x2Scale'))
         .tickFormat(this.get('timeTickFormatFn'));
     }.property(),
-    xDomain: function() {
-      var brushExtent = this.get('brushExtent'),
-          domain = Ember.EmberViz.Helpers.getDomain(this.get('_data'), function(d) { return d.x; });
-      if (brushExtent) {
-        domain = brushExtent;
-      }
-      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
-    }.property('_data', 'brushExtent', 'forceX'),
     x2Domain: function() {
       var domain = Ember.EmberViz.Helpers.getDomain(this.get('_data'),
                                                    function(d) { return d.x; });
       return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
     }.property('_data', 'forceX'),
-    yDomain: function() {
-      var domain,
-          data = this.get('_data'),
-          brushExtent = this.get('brushExtent');
-
-      // If there is a brushExtent, we should restrict the y domain to the
-      // points within the brushExtent timespan.
-      if (brushExtent) {
-        var minValue = null,
-            maxValue = null,
-            enabledSeries = data.rejectBy('disabled');
-
-        enabledSeries.forEach(function(series) {
-          series.values.forEach(function(point) {
-
-            if (point.x >= brushExtent[0] && point.x <= brushExtent[1]) {
-              if (minValue === null || point.y < minValue) {
-                minValue = point.y;
-              }
-              if (maxValue === null || point.y > maxValue) {
-                maxValue = point.y;
-              }
-            }
-          });
-        });
-        domain = [minValue, maxValue];
-      } else {
-        domain = Ember.EmberViz.Helpers.getDomain(data,
-                                                   function(d) { return d.y; });
-      }
-      return Ember.EmberViz.Helpers.overrideDomain(domain,
-                                                   this.get('forceY'),
-                                                   this.get('includeZero'));
-    }.property('_data.@each.disabled', 'brushExtent', 'forceY', 'includeZero'),
     y2Domain: function() {
-      var data = this.get('_data'),
-          brushExtent = this.get('brushExtent');
+      var data = this.get('_data');
 
-      // If there is a brushExtent, we should restrict the y domain to the
-      // points within the brushExtent timespan.
-      if (brushExtent) {
-        var minValue = null,
-            maxValue = null,
-            enabledSeries = data.rejectBy('disabled');
+      return Ember.EmberViz.Helpers.getDomain(data,
+                                              function(d) { return d.y; });
 
-        enabledSeries.forEach(function(series) {
-          series.values.forEach(function(point) {
-            if (point.x >= brushExtent[0] && point.x <= brushExtent[1]) {
-              if (minValue === null || point.y < minValue) {
-                minValue = point.y;
-              }
-              if (maxValue === null || point.y > maxValue) {
-                maxValue = point.y;
-              }
-            }
-          });
-        });
-        return [minValue, maxValue];
-      } else {
-        return Ember.EmberViz.Helpers.getDomain(data,
-                                                function(d) { return d.y; });
-      }
     }.property('_data', 'brushExtent'),
-    _contextChartHeight: function() {
-      var margins = this.get('contextMargins');
-      return this.get('contextHeight') - margins.bottom - margins.top;
-    }.property('contextHeight', 'contextMargins'),
-    _contextChartWidth: function() {
-      var margins = this.get('contextMargins');
-      return this.get('contextWidth') - margins.left - margins.right;
-    }.property('contextWidth', 'contextMargins'),
-    _mainChartHeight: function() {
-      var margins = this.get('margins');
-      return this.get('svgHeight') - this.get('contextHeight') - margins.top - margins.bottom;
-    }.property('svgHeight', 'contextHeight', 'margins'),
     _addContextLines: function() {
       var mainHeight = this.get('_mainChartHeight'),
           data = this.get('_data'),
@@ -1050,25 +1033,6 @@ $(function() {
       }
       return brush;
     }.property('x2Scale'),
-    _updateBrushBG: function() {
-      var brush = this.get('brush'),
-          brushExtent = this.get('brushExtent'),
-          x2Scale = this.get('x2Scale'),
-          elementId = this.get('elementId');
-
-      d3.select('#' + elementId + ' .ev-context-brush-background')
-        .data([brush.empty() ? x2Scale.domain() : brushExtent])
-        .each(function(d) {
-          var leftWidth = x2Scale(d[0]) - x2Scale.range()[0],
-              rightWidth = x2Scale.range()[1] - x2Scale(d[1]);
-          d3.select(this).select('.left')
-            .attr('width', leftWidth < 0 ? 0 : leftWidth);
-
-          d3.select(this).select('.right')
-            .attr('x', x2Scale(d[1]))
-            .attr('width', rightWidth < 0 ? 0 : rightWidth);
-        });
-    },
     _addContextBrush: function() {
       var contextG,
           brushBG,
@@ -1129,119 +1093,169 @@ $(function() {
       gBrush.selectAll('rect')
         .attr('height', _contextChartHeight);
       gBrush.selectAll('.resize').append('path').attr('d', resizePath);
+      this._updateBrushBG();
     },
 
-    _render: function() {
-      var shouldRender = this.get('shouldRender'),
-          elementId = this.get('elementId'),
-          data = this.get('_data'),
-          showLegend = this.get('showLegend'),
-          showTooltip = this.get('showTooltip');
-
-      if (!shouldRender) {
-        return;
-      }
-
-      // Clear the div.
-      $('#' + elementId).empty();
-
-      if (Ember.isEmpty(data)) {
-        return;
-      }
-
-      this._addChartContainer();
-
-      if (showLegend) {
-        this._addLegend();
-      }
-
-      this._addMainGrid();
-      this._addMainAxes();
-      this._addContextAxis();
-      this._addChartLines();
-      this._addContextLines();
-
-      if (showTooltip) {
-        this._addTooltip();
-        this._addHoverRect();
-        this._precomputePointLocations();
-      }
-
-      this._addContextBrush();
-
-      if (this.onRender instanceof Function) {
-        this.onRender();
-      }
-    }.observes('_data', 'showLegend', 'showTooltip', 'onRender')
   });
 
   Ember.Handlebars.helper('focus-with-context-chart',
                           Ember.EmberViz.FocusWithContextChartComponent);
 });
-// TODO: Build the Area Chart Component
-// $(function() {
-//   Ember.EmberViz.AreaChartComponent = Ember.EmberViz.BaseComponent.extend({
-//
-//   });
-//
-//   Ember.Handlebars.helper('area-chart', Ember.EmberViz.AreaChartComponent);
-// });
 $(function() {
-  Ember.EmberViz.BarChartComponent = Ember.EmberViz.BaseComponent.extend({
-    stacked: true,
+  Ember.EmberViz.AreaChartComponent = Ember.EmberViz.BaseComponent.extend({
+    showContext: false,
+    brushExtent: null,
+    // yDomain: function() {
+    //   var maxY = d3.max(this.get('_data'), function(series) {
+    //     return d3.max(series.values, function(elem) {
+    //       return elem.y0 + elem.y;
+    //     });
+    //   });
+    //   return [0, maxY];
+    // }.property('_data.[]'),
+    yDomain: function() {
+      var domain,
+          data = this.get('_data'),
+          brushExtent = this.get('brushExtent'),
+          minValue = null,
+          maxValue = null,
+          enabledSeries = data.rejectBy('disabled');
 
+      // If there is a brushExtent, we should restrict the y domain to the
+      // points within the brushExtent timespan.
+      if (this.get('showContext') && !Ember.isNone(brushExtent)) {
+
+        enabledSeries.forEach(function(series) {
+          series.values.forEach(function(point) {
+
+            if (point.x >= brushExtent[0] && point.x <= brushExtent[1]) {
+              if (minValue === null || point.y0 < minValue) {
+                minValue = point.y0;
+              }
+              var yTop = point.y + point.y0;
+              if (maxValue === null || yTop > maxValue) {
+                maxValue = yTop;
+              }
+            }
+          });
+        });
+        domain = [minValue, maxValue];
+      } else {
+        enabledSeries.forEach(function(series) {
+          series.values.forEach(function(point) {
+            if (minValue === null || point.y < minValue) {
+              minValue = point.y;
+            }
+            var yTop = point.y + point.y0;
+            if (maxValue === null || yTop > maxValue) {
+              maxValue = yTop;
+            }
+          });
+        });
+        domain = [minValue, maxValue];
+      }
+      return Ember.EmberViz.Helpers.overrideDomain(domain,
+                                                   this.get('forceY'),
+                                                   this.get('includeZero'));
+    }.property('_data.@each.disabled', 'showContext', 'brushExtent', 'forceY', 'includeZero'),
     xScale: function() {
-      return d3.scale.ordinal()
-        .domain(this.get('xDomain'))
-        .rangeRoundBands([0, this.get('_mainChartWidth')], 0.08);
+      return d3.time.scale.utc().domain(this.get('xDomain')).range([0, this.get('_mainChartWidth')]);
     }.property('xDomain', '_mainChartWidth'),
-
     yScale: function() {
-      return d3.scale.linear()
-        .domain(this.get('yDomain'))
-        .range([this.get('_mainChartHeight'), 0]);
+      return d3.scale.linear().domain(this.get('yDomain')).range([this.get('_mainChartHeight'), 0]);
     }.property('yDomain', '_mainChartHeight'),
+    xAxis: function() {
+      return d3.svg.axis().orient('bottom').ticks(7).scale(this.get('xScale')).tickFormat(this.get('timeTickFormatFn'));
+    }.property('xScale', 'timeTickFormatFn'),
+    x2Scale: function() {
+      return d3.time.scale.utc().domain(this.get('x2Domain')).range([0, this.get('_contextChartWidth')]);
+    }.property('x2Domain', '_contextChartWidth'),
+    y2Scale: function() {
+      return d3.scale.linear().domain(this.get('y2Domain')).range([this.get('_contextChartHeight'), 0]);
+    }.property('y2Domain', '_contextChartHeight'),
+    x2Axis: function() {
+      return d3.svg.axis().orient('bottom').ticks(7).scale(this.get('x2Scale'))
+        .tickFormat(this.get('timeTickFormatFn'));
+    }.property(),
+    x2Domain: function() {
+      var domain = Ember.EmberViz.Helpers.getDomain(this.get('_data'),
+                                                   function(d) { return d.x; });
+      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
+    }.property('_data', 'forceX'),
+    y2Domain: function() {
+      var data = this.get('_data');
 
-    xDomain: function() {
+      return Ember.EmberViz.Helpers.getDomain(data,
+                                              function(d) { return d.y + d.y0; });
+
+    }.property('_data', 'brushExtent'),
+
+    // TODO: Extract these into a time-series mixin or something.
+    timeFormatFn: function() {
       var data = this.get('_data'),
-          domainSet = new Ember.Set();
+          timeFormatter = this.get('timeFormatter'),
+          avgGranularity = this._getAverageGranularity(data);
 
-      if (data.length === 0) {
-        return [];
+      // If the average granularity is around or greater than one point per day,
+      // only show month and date.
+      if (avgGranularity >= 0.85 * MILLISECONDS_IN_DAY) {
+        return timeFormatter('%m/%d');
       }
 
+      // If the average granularity is less than a minute, show the month, date,
+      // hour, minute, and second.
+      if (avgGranularity <= MILLISECONDS_IN_MINUTE) {
+        return timeFormatter('%m/%d %H:%M:%S');
+      }
+
+      // Otherwise, show month, date, hour, and minute.
+      return timeFormatter('%m/%d %H:%M');
+    }.property('_data', 'timeFormatter'),
+
+    timeTickFormatFn: function() {
+      var data = this.get('_data'),
+          xDomain = this.get('xDomain'),
+          totalTimeRange = xDomain[1] - xDomain[0],
+          timeFormatter = this.get('timeFormatter'),
+          avgGranularity = this._getAverageGranularity(data);
+
+      // If the average granularity is around or greater than one point per day,
+      // only show month and date.
+      if (avgGranularity >= 0.85 * MILLISECONDS_IN_DAY) {
+        return timeFormatter('%m/%d');
+      }
+
+      // If more than 5 days are being displayed, only show month and date on
+      // the axis labels.
+      if (totalTimeRange > 5 * MILLISECONDS_IN_DAY) {
+        return timeFormatter('%m/%d');
+      }
+
+      // If we're showing more than one day, but still not enough days to get
+      // rid of time altogether, show both the date and time.
+      if (totalTimeRange > MILLISECONDS_IN_DAY) {
+        return timeFormatter('%m/%d %H:%M');
+      }
+
+      // In the scope of less than a day, show the time without the date.
+      return timeFormatter('%H:%M');
+    }.property('_data', 'xDomain', 'timeFormatter'),
+    _getAverageGranularity: function(data) {
+      var count = 0;
+      var total = 0;
       data.forEach(function(series) {
-        domainSet.addEach(series.get('values').getEach('x'));
+        for (var i = 1; i < series.values.length; i++) {
+          var x0 = series.values[i - 1].x;
+          var x1 = series.values[i].x;
+
+          count++;
+          total += x1 - x0;
+        }
       });
-
-      return domainSet.toArray();
-    }.property('_data.@each'),
-
-    yDomain: function() {
-      var maxY,
-          data = this.get('_data');
-      maxY = d3.max(data, function(series) {
-        return d3.max(series.values, function(elem) {
-          return elem.y0 + elem.y;
-        });
-      });
-      return [0, maxY];
-    }.property('_data.@each', 'stacked'),
-
-    xAxis: function() {
-      return d3.svg.axis()
-        .scale(this.get('xScale'))
-        .tickSize(0)
-        .tickPadding(6);
-    }.property('xScale'),
-
-    yAxis: function() {
-      return d3.svg.axis().orient('left').scale(this.get('yScale')).tickFormat(this.get('valueTickFormatFn'));
-      // return d3.svg.axis().orient('left').scale(this.get('yScale'));
-    }.property('yScale', 'valueTickFormatFn'),
+      return total / count;
+    },
 
     _data: function() {
-      window.cool = this;
       var result = [],
           data = this.get('data'),
           getX = this.get('getX'),
@@ -1336,6 +1350,500 @@ $(function() {
       return result;
     }.property('data.[]', 'getX', 'getY'),
 
+    area: function() {
+      var self = this;
+      return d3.svg.area()
+        .x(function(d) { return self.get('xScale')(d.x); })
+        .y0(function(d) { return self.get('yScale')(d.y0); })
+        .y1(function(d) { return self.get('yScale')(d.y0 + d.y); });
+    }.property('xScale', 'yScale'),
+    contextArea: function() {
+      var x2Scale = this.get('x2Scale'),
+          y2Scale = this.get('y2Scale');
+      return d3.svg.area()
+        .x(function(d) { return x2Scale(d.x); })
+        .y0(function(d) { return y2Scale(d.y0); })
+        .y1(function(d) { return y2Scale(d.y0 + d.y); });
+    }.property('x2Scale', 'y2Scale'),
+    _addChartAreas: function() {
+      var area = this.get('area'),
+          data = this.get('_data'),
+          colorFn = this.get('colorFn'),
+          elementId = this.get('elementId'),
+          g = d3.select('#' + elementId + ' .ev-main'),
+          clipPathId = elementId + '-clip-path';
+
+      g.append('clipPath')
+       .attr('id', clipPathId)
+       .append('rect')
+       .attr('width', this.get('_mainChartWidth'))
+       .attr('height', this.get('_mainChartHeight'));
+
+      var series = g.selectAll('.ev-series')
+          .data(data)
+        .enter().append('g')
+          .attr('class', 'ev-series');
+
+      series.append('path')
+        .attr('class', 'ev-area')
+        .attr('clip-path', 'url(#' + clipPathId + ')')
+        .style('opacity', 0.6)
+        .attr('d', function(d) { return area(d.values); })
+        .style('fill', colorFn)
+        .on('mousemove', this.get('_handleMouseMove'))
+        .on('mouseout', this.get('_handleMouseOut'));
+    },
+    _addContextAreas: function() {
+      var mainHeight = this.get('_mainChartHeight'),
+          data = this.get('_data'),
+          contextArea = this.get('contextArea'),
+          margins = this.get('margins'),
+          contextMargins = this.get('contextMargins'),
+          colorFn = this.get('colorFn'),
+          g = d3.select('#' + this.get('elementId') + ' .ev-main');
+
+      var series = g.append('g')
+          .attr('class', 'ev-context-series')
+          .selectAll('.ev-series')
+          .data(data)
+        .enter().append('g')
+          .attr('class', 'ev-series');
+
+      series.append('path')
+        .attr('class', 'ev-context-area')
+        .attr('transform',
+              'translate(0,' + (mainHeight + margins.bottom +
+                                contextMargins.top) + ')')
+        .style('opacity', 0.8)
+        .attr('d', function(d) { return contextArea(d.values); })
+        .style('fill', colorFn);
+    },
+    _handleMouseMove: function() {
+      var prevClosestPoint,
+          self = this,
+          elementId = this.get('elementId');
+
+      return function() {
+        var html,
+            newLeft,
+            newTop,
+            widthPastWindow,
+            closestPoint = null,
+            closestDistance = null,
+            margins = self.get('margins'),
+            xScale = self.get('xScale'),
+            yScale = self.get('yScale'),
+            position = d3.mouse(this),
+            xPosition = position[0],
+            $tooltipDiv = self.$(' .ev-chart-tooltip'),
+            tooltipCircle = d3.select('#' + elementId + ' .ev-tooltip-circle'),
+            elemInfo = d3.select(this).data()[0];
+
+        // Find the closest point
+        elemInfo.get('values').forEach(function(elem) {
+          var curDistance = Math.abs(xScale(elem.x) - xPosition);
+          if (curDistance < 20 && (Ember.isNone(closestDistance) || curDistance < closestDistance)) {
+            closestPoint = elem;
+            closestDistance = curDistance;
+          }
+
+        });
+
+        if (closestPoint) {
+          var xPx = xScale(closestPoint.x),
+              yPx = yScale(closestPoint.y + closestPoint.y0);
+          html = self.get('tooltipContentFn')(closestPoint.x, closestPoint.y, closestPoint.originalj,
+                                              elemInfo.get('key'));
+
+          // Change the opacity of the target element.
+          d3.select(this)
+            .transition()
+            .duration(150)
+            .styleTween('opacity', function(d, i, a) {
+              return d3.interpolate(a, 0.8);
+            });
+
+          // Update the tooltipDiv contents.
+          $tooltipDiv.html(html);
+
+          // Move the tooltip div near the closest point.
+          newLeft = margins.left + xPx;
+          newTop = yPx- $tooltipDiv.height() + margins.top;
+          $tooltipDiv
+            .css('display', 'inline')
+            .css('left', newLeft)
+            .css('top', newTop);
+            // .animate({
+            //   left: newLeft,
+            //   top: newTop
+            // }, 150);
+
+
+          // Determine if the new location of the tooltip goes off the window
+          // and move it inside the window if that's the case.
+          widthPastWindow = ($tooltipDiv.offset().left + $tooltipDiv.width()) -
+            $('body').width();
+          if (widthPastWindow > 0) {
+            $tooltipDiv.css('left', newLeft - widthPastWindow);
+          }
+
+          // If the closest point is different this time, reset the
+          // tooltipCircle in preparation for the transition animation.
+          if (!Ember.EmberViz.Helpers.arePointsEqual(closestPoint,
+                                                     prevClosestPoint)) {
+            tooltipCircle.style('display', 'inline')
+              .attr('cx', xPx + 'px')
+              .attr('cy', yPx + 'px')
+              .attr('r', 3)
+              .style('opacity', 0.3);
+          }
+
+          // Position the tooltipCircle around the closest point.
+          tooltipCircle.style('display', 'inline')
+            .transition()
+            .duration(150)
+            .attrTween('r', function(d, i, a) {
+              return d3.interpolate(a, 7);
+            })
+            .styleTween('opacity', function(d, i, a) {
+              return d3.interpolate(a, 0.8);
+            });
+
+          prevClosestPoint = closestPoint;
+        } else {
+          prevClosestPoint = null;
+
+          // Hide the tooltip
+          $tooltipDiv.css('display', 'none');
+          tooltipCircle.style('display', 'none');
+        }
+      };
+    }.property(),
+    _handleMouseOut: function() {
+      var elementId = this.get('elementId'),
+          self = this;
+      return function() {
+        var relatedTarget = d3.select(d3.event.relatedTarget);
+        if (!relatedTarget.empty() && relatedTarget.attr('class') === 'ev-tooltip-circle') {
+          return;
+        }
+
+        // Hide the tooltip.
+        self.$(' .ev-chart-tooltip')
+          .css('display', 'none');
+
+        // Hide the tooltip circle.
+        d3.select('#' + elementId + ' .ev-tooltip-circle')
+          .style('display', 'none');
+
+        // Change the opacity of the target element.
+        d3.select(this)
+          .transition()
+          .duration(150)
+          .styleTween('opacity', function(d, i, a) {
+            return d3.interpolate(a, 0.5);
+          });
+      };
+    }.property(),
+    tooltipContentFn: function() {
+      var valueFormatFn = this.get('valueFormatFn'),
+          timeFormatFn = this.get('timeFormatFn');
+
+      return function(x, y, elem, seriesName) {
+        return '<h5>' + seriesName + '</h5>' +
+               '<hr />' +
+               '<p>' + valueFormatFn(y) + ' at ' +
+               timeFormatFn(new Date(x)) + '</p>';
+      };
+    }.property('valueFormatFn', 'timeFormatFn'),
+    brush: function() {
+      var brush,
+          self = this,
+          elementId = this.get('elementId'),
+          brushExtent = this.get('brushExtent');
+
+      function onBrush() {
+        var g = d3.select('#' + elementId + ' .ev-main'),
+            area = self.get('area');
+
+        brushExtent = brush.empty() ? null : brush.extent();
+        self.set('brushExtent', brushExtent);
+
+        g.select('.ev-axis.main-x-axis')
+         .call(self.get('xAxis'));
+        g.select('.ev-axis.main-y-axis')
+         .call(self.get('yAxis'));
+        g.selectAll('.ev-series')
+         .selectAll('.ev-area')
+         .attr('d', function(d) { return area(d.values); });
+
+        self._updateBrushBG();
+
+        // If the user supplied an onbrush callback, call it.
+        if (self.onBrush instanceof Function) {
+          self.onBrush(brushExtent);
+        }
+      }
+
+      brush = d3.svg.brush()
+        .x(this.get('x2Scale'))
+        .on('brush', onBrush);
+      if (brushExtent) {
+        brush.extent(brushExtent);
+      }
+      return brush;
+    }.property('x2Scale'),
+    _addContextBrush: function() {
+      var contextG,
+          brushBG,
+          gBrush,
+          brushBGenter,
+          elementId = this.get('elementId'),
+          g = d3.select('#' + elementId + ' .ev-main'),
+          _mainChartHeight = this.get('_mainChartHeight'),
+          margins = this.get('margins'),
+          contextMargins = this.get('contextMargins'),
+          _contextChartHeight = this.get('_contextChartHeight'),
+          brush = this.get('brush');
+      contextG = g.append('g')
+        .attr('class', 'ev-brush')
+        .attr('transform',
+              'translate(0,' + (_mainChartHeight + margins.bottom +
+                                contextMargins.top) + ')');
+      contextG.append('g')
+        .attr('class', 'ev-context-brush-background');
+      gBrush = contextG.append('g')
+        .attr('class', 'ev-context-brush');
+
+      brushBG = contextG.select('.ev-context-brush-background').selectAll('g')
+        .data([brush.extent()]);
+
+      brushBGenter = brushBG.enter()
+        .append('g');
+
+      brushBGenter.append('rect')
+        .attr('class', 'left')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('height', _contextChartHeight);
+
+      brushBGenter.append('rect')
+        .attr('class', 'right')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('height', _contextChartHeight);
+
+      // Taken from crossfilter (http://square.github.com/crossfilter/)
+      function resizePath(d) {
+        var e = +(d === 'e'),
+            x = e ? 1 : -1,
+            y = _contextChartHeight / 3;
+        return 'M' + (0.5 * x) + ',' + y +
+          'A6,6 0 0 ' + e + ' ' + (6.5 * x) + ',' + (y + 6) +
+          'V' + (2 * y - 6) +
+          'A6,6 0 0 ' + e + ' ' + (0.5 * x) + ',' + (2 * y) +
+          'Z'+
+          'M' + (2.5 * x) + ',' + (y + 8) +
+          'V' + (2 * y - 8) +
+          'M' + (4.5 * x) + ',' + (y + 8) +
+          'V' + (2 * y - 8);
+      }
+      gBrush
+        .call(brush);
+      gBrush.selectAll('rect')
+        .attr('height', _contextChartHeight);
+      gBrush.selectAll('.resize').append('path').attr('d', resizePath);
+      this._updateBrushBG();
+    },
+    _addContextAxis: function() {
+      var mainChartHeight = this.get('_mainChartHeight'),
+          contextChartHeight = this.get('_contextChartHeight'),
+          margins = this.get('margins'),
+          contextMargins = this.get('contextMargins');
+
+      // Add the context x-axis.
+      d3.select('#' + this.get('elementId') + ' .ev-main')
+        .append('g')
+        .attr('class', 'ev-axis context-x-axis')
+        .attr('transform',
+             'translate(0,' + (mainChartHeight + margins.bottom +
+                               contextChartHeight + contextMargins.top) + ')')
+        .call(this.get('x2Axis'));
+    },
+    _render: function() {
+      if (!this.get('shouldRender')) {
+        return;
+      }
+
+      // Clear the div.
+      this.$().empty();
+
+      if (Ember.isEmpty(this.get('_data'))) {
+        return;
+      }
+
+      this._addChartContainer();
+      this._addMainAxes();
+      this._addChartAreas();
+
+      if (this.get('showTooltip')) {
+        this._addTooltip();
+      }
+
+      if (this.get('showContext')) {
+        this._addContextAreas();
+        this._addContextAxis();
+        this._addContextBrush();
+      }
+
+    }.observes('_data')
+  });
+
+  Ember.Handlebars.helper('area-chart', Ember.EmberViz.AreaChartComponent);
+});
+$(function() {
+  Ember.EmberViz.BarChartComponent = Ember.EmberViz.BaseComponent.extend({
+    stacked: true,
+
+    xScale: function() {
+      return d3.scale.ordinal()
+        .domain(this.get('xDomain'))
+        .rangeRoundBands([0, this.get('_mainChartWidth')], 0.08);
+    }.property('xDomain', '_mainChartWidth'),
+
+    yScale: function() {
+      return d3.scale.linear()
+        .domain(this.get('yDomain'))
+        .range([this.get('_mainChartHeight'), 0]);
+    }.property('yDomain', '_mainChartHeight'),
+
+    xDomain: function() {
+      var data = this.get('_data'),
+          domainSet = new Ember.Set();
+
+      if (data.length === 0) {
+        return [];
+      }
+
+      data.forEach(function(series) {
+        domainSet.addEach(series.get('values').getEach('x'));
+      });
+
+      return domainSet.toArray();
+    }.property('_data.@each'),
+
+    yDomain: function() {
+      var maxY,
+          data = this.get('_data');
+      maxY = d3.max(data, function(series) {
+        return d3.max(series.values, function(elem) {
+          return elem.y0 + elem.y;
+        });
+      });
+      return [0, maxY];
+    }.property('_data.@each', 'stacked'),
+
+    xAxis: function() {
+      return d3.svg.axis()
+        .scale(this.get('xScale'))
+        .tickSize(0)
+        .tickPadding(6);
+    }.property('xScale'),
+
+    _data: function() {
+      var result = [],
+          data = this.get('data'),
+          getX = this.get('getX'),
+          getY = this.get('getY');
+
+      // Verify that the getX and getY attributes are functions.
+      if (typeof getX !== 'function') {
+        console.error('Provided "getX" attribute is not a valid function. ', SEE_DOCUMENTATION_MSG);
+        return result;
+      }
+      if (typeof getY !== 'function') {
+        console.error('Provided "getY" attribute is not a valid function. ', SEE_DOCUMENTATION_MSG);
+        return result;
+      }
+
+      // Verify that the data attribute is valid and that it has a map function.
+      if (!data || typeof data.map !== 'function') {
+        return result;
+      }
+
+      // Make a deep copy of data to avoid manipulating the controller's clean
+      // data.
+      try {
+        if (data.length === 0) {
+          return [];
+        }
+        var seriesLength = data[0].values.length;
+        data.forEach(function(series) {
+          if (series.values.length !== seriesLength) {
+            throw "All series don't have the same length." + SEE_DOCUMENTATION_MSG;
+          }
+        });
+        result = data.map(function(series) {
+          var valuesCopy = series.values.map(function(elem) {
+            var x,
+                y,
+                xError = 'Could not extract a valid datapoint using' +
+                  ' the supplied "getX" function.' + SEE_DOCUMENTATION_MSG,
+                yError = 'Could not extract a valid datapoint using' +
+                  ' the supplied "getY" function.' + SEE_DOCUMENTATION_MSG;
+
+            // Use the getX and getY functions to extract the x and y values from
+            // each datapoint.
+            try {
+              x = getX(elem);
+            } catch (e) {
+              throw xError;
+            }
+            try {
+              y = getY(elem);
+            } catch (e) {
+              throw yError;
+            }
+
+            return {
+              x: x,
+              y: y,
+              original: elem
+            };
+          });
+
+          return Ember.Object.create({
+            key: series.key,
+            values: valuesCopy,
+            disabled: series.disabled
+          });
+        });
+      } catch(e) {
+        console.error(e);
+        return result;
+      }
+
+      // TODO: Verify that all series have the same x-vals in the same order OR
+      //  normalize them so that they do.
+
+      // Calculate the y0 for each series.
+      result.forEach(function(series, seriesIndex) {
+
+        series.get('values').forEach(function(elem, elemIndex) {
+
+          // TODO: Make this smarter if the y is negative.
+          if (seriesIndex === 0) {
+            elem.y0 = 0;
+          } else {
+            var prevElement = result[seriesIndex - 1].values[elemIndex];
+            elem.y0 = prevElement.y0 + prevElement.y;
+          }
+        });
+      });
+
+      return result;
+    }.property('data.[]', 'getX', 'getY'),
+
     _addBarLines: function() {
       var elementId = this.get('elementId'),
           data = this.get('_data'),
@@ -1360,6 +1868,7 @@ $(function() {
           .attr('y', height)
           .attr('width', xScale.rangeBand())
           .attr('height', 0)
+          .style('opacity', 0.5)
           .on('mousemove', this.get('_handleMouseMove'))
           .on('mouseout', this.get('_handleMouseOut'));
 
@@ -1381,8 +1890,7 @@ $(function() {
     }.property('valueFormatFn'),
 
     _handleMouseMove: function() {
-      var self = this,
-          elementId = this.get('elementId');
+      var self = this;
 
       return function() {
         var newLeft,
@@ -1392,11 +1900,19 @@ $(function() {
             position = d3.mouse(this),
             xPosition = position[0],
             yPosition = position[1],
-            $tooltipDiv = $('#' + elementId + ' .ev-chart-tooltip'),
+            $tooltipDiv = self.$(' .ev-chart-tooltip'),
             elemInfo = d3.event.target.__data__,
             parentInfo = d3.event.target.parentNode.__data__,
             html = self.get('tooltipContentFn')(elemInfo.x, elemInfo.y, elemInfo,
                                                 parentInfo.get('key'));
+
+        // Change the opacity of the target element.
+        d3.select(this)
+          .transition()
+          .duration(150)
+          .styleTween('opacity', function(d, i, a) {
+            return d3.interpolate(a, 1.0);
+          });
 
         // Update the tooltipDiv contents.
         $tooltipDiv.html(html);
@@ -1418,21 +1934,37 @@ $(function() {
         }
       };
     }.property(),
+    _handleMouseOut: function() {
+      var elementId = this.get('elementId');
+      return function() {
+        // Hide the tooltip.
+        $('#' + elementId + ' .ev-chart-tooltip')
+          .css('display', 'none');
+
+        // Hide the tooltip circle.
+        d3.select('#' + elementId + ' .ev-tooltip-circle')
+          .style('display', 'none');
+
+        // Change the opacity of the target element.
+        d3.select(this)
+          .transition()
+          .duration(150)
+          .styleTween('opacity', function(d, i, a) {
+            return d3.interpolate(a, 0.5);
+          });
+      };
+    }.property(),
 
     _render: function() {
-      var shouldRender = this.get('shouldRender'),
-          elementId = this.get('elementId'),
-          data = this.get('_data'),
-          showTooltip = this.get('showTooltip');
 
-      if (!shouldRender) {
+      if (!this.get('shouldRender')) {
         return;
       }
 
       // Clear the div.
-      $('#' + elementId).empty();
+      this.$().empty();
 
-      if (Ember.isEmpty(data)) {
+      if (Ember.isEmpty(this.get('_data'))) {
         return;
       }
 
@@ -1440,12 +1972,11 @@ $(function() {
       this._addMainAxes();
       this._addBarLines();
 
-      if (showTooltip) {
+      if (this.get('showTooltip')) {
         this._addTooltip();
       }
 
-
-    }
+    }.observes('_data')
   });
 
   Ember.Handlebars.helper('bar-chart', Ember.EmberViz.BarChartComponent);
