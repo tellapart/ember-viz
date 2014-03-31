@@ -64,6 +64,9 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
     contextWidth: Ember.computed.alias('width'),
     contextHeight: 70,
 
+    xGridTicks: 7,
+    yGridTicks: 5,
+
     // Normally, the component chooses its size based on the container size, as
     // the CSS formats it. If CSS doesn't specify a size, then these default
     // values are used. To force a specific size, override the 'height' and
@@ -311,8 +314,6 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
     showLegend: false,
     legendHeight: 100,
     lineType: d3.svg.line,
-    xGridTicks: 7,
-    yGridTicks: 5,
 
     // User defined callbacks.
     onRender: null,
