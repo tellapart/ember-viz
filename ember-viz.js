@@ -262,10 +262,10 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
                                                    this.get('includeZero'));
     }.property('_data.@each.disabled', 'showContext', 'brushExtent', 'forceY', 'includeZero'),
     xAxis: function() {
-      return d3.svg.axis().orient('bottom').ticks(7).scale(this.get('xScale')).tickFormat(this.get('timeTickFormatFn'));
+      return d3.svg.axis().orient('bottom').ticks(this.get('xGridTicks')).scale(this.get('xScale')).tickFormat(this.get('timeTickFormatFn'));
     }.property('xScale', 'timeTickFormatFn'),
     yAxis: function() {
-      return d3.svg.axis().orient('left').ticks(5).scale(this.get('yScale')).tickFormat(this.get('valueTickFormatFn'));
+      return d3.svg.axis().orient('left').ticks(this.get('yGridTicks')).scale(this.get('yScale')).tickFormat(this.get('valueTickFormatFn'));
     }.property('yScale', 'valueTickFormatFn'),
 
     didInsertElement: function() {
@@ -311,6 +311,8 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
     showLegend: false,
     legendHeight: 100,
     lineType: d3.svg.line,
+    xGridTicks: 7,
+    yGridTicks: 5,
 
     // User defined callbacks.
     onRender: null,
@@ -333,11 +335,11 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
       return d3.scale.linear().domain(this.get('yDomain')).range([this.get('_mainChartHeight'), 0]);
     }.property('yDomain', '_mainChartHeight'),
     xGrid: function() {
-      return d3.svg.axis().orient('bottom').ticks(7).tickFormat('').scale(this.get('xScale'))
+      return d3.svg.axis().orient('bottom').ticks(this.get('xGridTicks')).tickFormat('').scale(this.get('xScale'))
         .tickSize(-1 * this.get('_mainChartHeight'), 0, 0);
     }.property('xScale', '_mainChartHeight'),
     yGrid: function() {
-      return d3.svg.axis().orient('left').tickFormat('').scale(this.get('yScale'))
+      return d3.svg.axis().orient('left').ticks(this.get('yGridTicks')).tickFormat('').scale(this.get('yScale'))
         .tickSize(-1 * this.get('_mainChartWidth'), 0, 0);
     }.property('yScale', '_mainChartWidth'),
 
@@ -936,7 +938,7 @@ $(function() {
       return d3.scale.linear().domain(this.get('y2Domain')).range([this.get('_contextChartHeight'), 0]);
     }.property('y2Domain', '_contextChartHeight'),
     x2Axis: function() {
-      return d3.svg.axis().orient('bottom').ticks(7).scale(this.get('x2Scale'))
+      return d3.svg.axis().orient('bottom').ticks(this.get('xGridTicks')).scale(this.get('x2Scale'))
         .tickFormat(this.get('timeTickFormatFn'));
     }.property(),
     x2Domain: function() {
@@ -1165,7 +1167,7 @@ $(function() {
       return d3.scale.linear().domain(this.get('yDomain')).range([this.get('_mainChartHeight'), 0]);
     }.property('yDomain', '_mainChartHeight'),
     xAxis: function() {
-      return d3.svg.axis().orient('bottom').ticks(7).scale(this.get('xScale')).tickFormat(this.get('timeTickFormatFn'));
+      return d3.svg.axis().orient('bottom').ticks(this.get('xGridTicks')).scale(this.get('xScale')).tickFormat(this.get('timeTickFormatFn'));
     }.property('xScale', 'timeTickFormatFn'),
     x2Scale: function() {
       return d3.time.scale.utc().domain(this.get('x2Domain')).range([0, this.get('_contextChartWidth')]);
@@ -1174,7 +1176,7 @@ $(function() {
       return d3.scale.linear().domain(this.get('y2Domain')).range([this.get('_contextChartHeight'), 0]);
     }.property('y2Domain', '_contextChartHeight'),
     x2Axis: function() {
-      return d3.svg.axis().orient('bottom').ticks(7).scale(this.get('x2Scale'))
+      return d3.svg.axis().orient('bottom').ticks(this.get('xGridTicks')).scale(this.get('x2Scale'))
         .tickFormat(this.get('timeTickFormatFn'));
     }.property(),
     x2Domain: function() {
@@ -1745,6 +1747,7 @@ $(function() {
 
     xAxis: function() {
       return d3.svg.axis()
+        .ticks(this.get('xGridTicks'))
         .scale(this.get('xScale'))
         .tickSize(0)
         .tickPadding(6);
