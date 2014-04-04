@@ -64,7 +64,7 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
     contextWidth: Ember.computed.alias('width'),
     contextHeight: 70,
 
-    xGridTicks: 7,
+    xGridTicks: 5,
     yGridTicks: 5,
 
     // Normally, the component chooses its size based on the container size, as
@@ -139,6 +139,46 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
       var margins = this.get('contextMargins');
       return this.get('contextWidth') - margins.left - margins.right;
     }.property('contextWidth', 'contextMargins'),
+
+    timeTickFormatFn: function() {
+      return this._getTimeTickFormatFn(this.get('xDomain'));
+    }.property('_data', 'xDomain', 'timeFormatter'),
+
+    _getTimeTickFormatFn: function(domain) {
+      var data = this.get('_data'),
+          totalTimeRange = domain[1] - domain[0],
+          timeFormatter = this.get('timeFormatter'),
+          avgGranularity = this._getAverageGranularity(data),
+          start = new Date(domain[0]),
+          end = new Date(domain[1]);
+
+      // If the start and end date are in different years, show the year.
+      if (start.getFullYear() !== end.getFullYear()) {
+        return timeFormatter('%m/%d/%y');
+      }
+
+      // If the full range of data is on the same date, only display
+      // hour:minutes.
+      if (start.getFullYear() === end.getFullYear() &&
+          start.getMonth() === end.getMonth() &&
+          start.getDate() === end.getDate()) {
+        return timeFormatter('%H:%M');
+      }
+
+      // If the average granularity is around or greater than one point per day,
+      // only show month and date.
+      if (avgGranularity >= 0.85 * MILLISECONDS_IN_DAY) {
+        return timeFormatter('%m/%d');
+      }
+
+      // If more than 3 days are being displayed, only show month and date on
+      // the axis labels.
+      if (totalTimeRange > 3 * MILLISECONDS_IN_DAY) {
+        return timeFormatter('%m/%d');
+      }
+
+      return timeFormatter('%m/%d %H:%M');
+    },
 
     _addChartContainer: function() {
 
@@ -265,10 +305,18 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
                                                    this.get('includeZero'));
     }.property('_data.@each.disabled', 'showContext', 'brushExtent', 'forceY', 'includeZero'),
     xAxis: function() {
-      return d3.svg.axis().orient('bottom').ticks(this.get('xGridTicks')).scale(this.get('xScale')).tickFormat(this.get('timeTickFormatFn'));
+      return d3.svg.axis()
+        .orient('bottom')
+        .ticks(this.get('xGridTicks'))
+        .scale(this.get('xScale'))
+        .tickFormat(this.get('timeTickFormatFn'));
     }.property('xScale', 'timeTickFormatFn'),
     yAxis: function() {
-      return d3.svg.axis().orient('left').ticks(this.get('yGridTicks')).scale(this.get('yScale')).tickFormat(this.get('valueTickFormatFn'));
+      return d3.svg.axis()
+        .orient('left')
+        .ticks(this.get('yGridTicks'))
+        .scale(this.get('yScale'))
+        .tickFormat(this.get('valueTickFormatFn'));
     }.property('yScale', 'valueTickFormatFn'),
 
     didInsertElement: function() {
@@ -395,35 +443,6 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
       // Otherwise, show month, date, hour, and minute.
       return timeFormatter('%m/%d %H:%M');
     }.property('_data', 'timeFormatter'),
-
-    timeTickFormatFn: function() {
-      var data = this.get('_data'),
-          xDomain = this.get('xDomain'),
-          totalTimeRange = xDomain[1] - xDomain[0],
-          timeFormatter = this.get('timeFormatter'),
-          avgGranularity = this._getAverageGranularity(data);
-
-      // If the average granularity is around or greater than one point per day,
-      // only show month and date.
-      if (avgGranularity >= 0.85 * MILLISECONDS_IN_DAY) {
-        return timeFormatter('%m/%d');
-      }
-
-      // If more than 5 days are being displayed, only show month and date on
-      // the axis labels.
-      if (totalTimeRange > 5 * MILLISECONDS_IN_DAY) {
-        return timeFormatter('%m/%d');
-      }
-
-      // If we're showing more than one day, but still not enough days to get
-      // rid of time altogether, show both the date and time.
-      if (totalTimeRange > MILLISECONDS_IN_DAY) {
-        return timeFormatter('%m/%d %H:%M');
-      }
-
-      // In the scope of less than a day, show the time without the date.
-      return timeFormatter('%H:%M');
-    }.property('_data', 'xDomain', 'timeFormatter'),
 
     _getAverageGranularity: function(data) {
       var count = 0;
@@ -867,13 +886,13 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
       // Clear the div.
       this.$().empty();
 
+      this._addChartContainer();
+
       // TODO: replace this with some computed property so we don't need data in
       // the render function.
       if (Ember.isEmpty(this.get('_data'))) {
         return;
       }
-
-      this._addChartContainer();
 
       if (this.get('showLegend')) {
         this._addLegend();
@@ -933,14 +952,21 @@ $(function() {
       };
     }.property('contextLine'),
     x2Scale: function() {
-      return d3.time.scale.utc().domain(this.get('x2Domain')).range([0, this.get('_contextChartWidth')]);
+      return d3.time.scale.utc()
+        .domain(this.get('x2Domain'))
+        .range([0, this.get('_contextChartWidth')]);
     }.property('x2Domain', '_contextChartWidth'),
     y2Scale: function() {
-      return d3.scale.linear().domain(this.get('y2Domain')).range([this.get('_contextChartHeight'), 0]);
+      return d3.scale.linear()
+        .domain(this.get('y2Domain'))
+        .range([this.get('_contextChartHeight'), 0]);
     }.property('y2Domain', '_contextChartHeight'),
     x2Axis: function() {
-      return d3.svg.axis().orient('bottom').ticks(this.get('xGridTicks')).scale(this.get('x2Scale'))
-        .tickFormat(this.get('timeTickFormatFn'));
+      return d3.svg.axis()
+        .orient('bottom')
+        .ticks(this.get('xGridTicks'))
+        .scale(this.get('x2Scale'))
+        .tickFormat(this.get('timeTickFormatFn2'));
     }.property(),
     x2Domain: function() {
       var domain = Ember.EmberViz.Helpers.getDomain(this.get('_data'),
@@ -954,6 +980,9 @@ $(function() {
                                               function(d) { return d.y; });
 
     }.property('_data', 'brushExtent'),
+    timeTickFormatFn2: function() {
+      return this._getTimeTickFormatFn(this.get('x2Domain'));
+    }.property('_data', 'x2Domain', 'timeFormatter'),
     _addContextLines: function() {
       var mainHeight = this.get('_mainChartHeight'),
           data = this.get('_data'),
@@ -993,7 +1022,8 @@ $(function() {
       var brush,
           self = this,
           elementId = this.get('elementId'),
-          brushExtent = this.get('brushExtent');
+          brushExtent = this.get('brushExtent'),
+          x2Domain = this.get('x2Domain');
 
       function onBrush() {
         var g = d3.select('#' + elementId + ' .ev-main'),
@@ -1032,10 +1062,18 @@ $(function() {
         .x(this.get('x2Scale'))
         .on('brush', onBrush);
       if (brushExtent) {
+        // Make sure the existing brushExtent fits inside the actual domain
+        //  from the data.
+        if (brushExtent[0] < x2Domain[0]) {
+          brushExtent[0] = x2Domain[0];
+        }
+        if (brushExtent[1] > x2Domain[1]) {
+          brushExtent[1] = x2Domain[1];
+        }
         brush.extent(brushExtent);
       }
       return brush;
-    }.property('x2Scale'),
+    }.property('x2Scale', 'x2Domain'),
     _addContextBrush: function() {
       var contextG,
           brushBG,
@@ -1108,14 +1146,6 @@ $(function() {
   Ember.EmberViz.AreaChartComponent = Ember.EmberViz.BaseComponent.extend({
     showContext: false,
     brushExtent: null,
-    // yDomain: function() {
-    //   var maxY = d3.max(this.get('_data'), function(series) {
-    //     return d3.max(series.values, function(elem) {
-    //       return elem.y0 + elem.y;
-    //     });
-    //   });
-    //   return [0, maxY];
-    // }.property('_data.[]'),
     yDomain: function() {
       var domain,
           data = this.get('_data'),
@@ -1162,24 +1192,39 @@ $(function() {
                                                    this.get('includeZero'));
     }.property('_data.@each.disabled', 'showContext', 'brushExtent', 'forceY', 'includeZero'),
     xScale: function() {
-      return d3.time.scale.utc().domain(this.get('xDomain')).range([0, this.get('_mainChartWidth')]);
+      return d3.time.scale.utc()
+        .domain(this.get('xDomain'))
+        .range([0, this.get('_mainChartWidth')]);
     }.property('xDomain', '_mainChartWidth'),
     yScale: function() {
-      return d3.scale.linear().domain(this.get('yDomain')).range([this.get('_mainChartHeight'), 0]);
+      return d3.scale.linear()
+        .domain(this.get('yDomain'))
+        .range([this.get('_mainChartHeight'), 0]);
     }.property('yDomain', '_mainChartHeight'),
     xAxis: function() {
-      return d3.svg.axis().orient('bottom').ticks(this.get('xGridTicks')).scale(this.get('xScale')).tickFormat(this.get('timeTickFormatFn'));
+      return d3.svg.axis()
+        .orient('bottom')
+        .ticks(this.get('xGridTicks'))
+        .scale(this.get('xScale'))
+        .tickFormat(this.get('timeTickFormatFn'));
     }.property('xScale', 'timeTickFormatFn'),
     x2Scale: function() {
-      return d3.time.scale.utc().domain(this.get('x2Domain')).range([0, this.get('_contextChartWidth')]);
+      return d3.time.scale.utc()
+        .domain(this.get('x2Domain'))
+        .range([0, this.get('_contextChartWidth')]);
     }.property('x2Domain', '_contextChartWidth'),
     y2Scale: function() {
-      return d3.scale.linear().domain(this.get('y2Domain')).range([this.get('_contextChartHeight'), 0]);
+      return d3.scale.linear()
+        .domain(this.get('y2Domain'))
+        .range([this.get('_contextChartHeight'), 0]);
     }.property('y2Domain', '_contextChartHeight'),
     x2Axis: function() {
-      return d3.svg.axis().orient('bottom').ticks(this.get('xGridTicks')).scale(this.get('x2Scale'))
-        .tickFormat(this.get('timeTickFormatFn'));
-    }.property(),
+      return d3.svg.axis()
+        .orient('bottom')
+        .ticks(this.get('xGridTicks'))
+        .scale(this.get('x2Scale'))
+        .tickFormat(this.get('timeTickFormatFn2'));
+    }.property('x2Scale', 'xGridTicks', 'timeTickFormatFn2'),
     x2Domain: function() {
       var domain = Ember.EmberViz.Helpers.getDomain(this.get('_data'),
                                                    function(d) { return d.x; });
@@ -1215,34 +1260,10 @@ $(function() {
       return timeFormatter('%m/%d %H:%M');
     }.property('_data', 'timeFormatter'),
 
-    timeTickFormatFn: function() {
-      var data = this.get('_data'),
-          xDomain = this.get('xDomain'),
-          totalTimeRange = xDomain[1] - xDomain[0],
-          timeFormatter = this.get('timeFormatter'),
-          avgGranularity = this._getAverageGranularity(data);
+    timeTickFormatFn2: function() {
+      return this._getTimeTickFormatFn(this.get('x2Domain'));
+    }.property('_data', 'x2Domain', 'timeFormatter'),
 
-      // If the average granularity is around or greater than one point per day,
-      // only show month and date.
-      if (avgGranularity >= 0.85 * MILLISECONDS_IN_DAY) {
-        return timeFormatter('%m/%d');
-      }
-
-      // If more than 5 days are being displayed, only show month and date on
-      // the axis labels.
-      if (totalTimeRange > 5 * MILLISECONDS_IN_DAY) {
-        return timeFormatter('%m/%d');
-      }
-
-      // If we're showing more than one day, but still not enough days to get
-      // rid of time altogether, show both the date and time.
-      if (totalTimeRange > MILLISECONDS_IN_DAY) {
-        return timeFormatter('%m/%d %H:%M');
-      }
-
-      // In the scope of less than a day, show the time without the date.
-      return timeFormatter('%H:%M');
-    }.property('_data', 'xDomain', 'timeFormatter'),
     _getAverageGranularity: function(data) {
       var count = 0;
       var total = 0;
@@ -1563,7 +1584,8 @@ $(function() {
       var brush,
           self = this,
           elementId = this.get('elementId'),
-          brushExtent = this.get('brushExtent');
+          brushExtent = this.get('brushExtent'),
+          x2Domain = this.get('x2Domain');
 
       function onBrush() {
         var g = d3.select('#' + elementId + ' .ev-main'),
@@ -1592,10 +1614,18 @@ $(function() {
         .x(this.get('x2Scale'))
         .on('brush', onBrush);
       if (brushExtent) {
+        // Make sure the existing brushExtent fits inside the actual domain
+        //  from the data.
+        if (brushExtent[0] < x2Domain[0]) {
+          brushExtent[0] = x2Domain[0];
+        }
+        if (brushExtent[1] > x2Domain[1]) {
+          brushExtent[1] = x2Domain[1];
+        }
         brush.extent(brushExtent);
       }
       return brush;
-    }.property('x2Scale'),
+    }.property('x2Scale', 'x2Domain'),
     _addContextBrush: function() {
       var contextG,
           brushBG,
@@ -1681,11 +1711,12 @@ $(function() {
       // Clear the div.
       this.$().empty();
 
+      this._addChartContainer();
+
       if (Ember.isEmpty(this.get('_data'))) {
         return;
       }
 
-      this._addChartContainer();
       this._addMainAxes();
       this._addChartAreas();
 
@@ -1968,11 +1999,12 @@ $(function() {
       // Clear the div.
       this.$().empty();
 
+      this._addChartContainer();
+
       if (Ember.isEmpty(this.get('_data'))) {
         return;
       }
 
-      this._addChartContainer();
       this._addMainAxes();
       this._addBarLines();
 
