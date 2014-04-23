@@ -15,6 +15,7 @@ TODO
 
 Done
 ----
+- Add basic pie charts
 - Fix context chart axis when data changes
 - Axis labels for multi-year, maybe even just show the year if the data being
     displayed isn't the current year.

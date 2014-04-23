@@ -1,9 +1,11 @@
 (function() {
   Ember.EmberViz = Ember.Namespace.create();
+
+  Ember.libraries.register('EmberViz', '0.1.9');
 })();
 
-var MILLISECONDS_IN_DAY = 86400000;
 var MILLISECONDS_IN_MINUTE = 60000;
+var MILLISECONDS_IN_DAY = MILLISECONDS_IN_MINUTE * 60 * 24;
 var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
   ' EmberViz usage details.';
 
@@ -66,6 +68,9 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
 
     xGridTicks: 5,
     yGridTicks: 5,
+
+    startOpacity: 0.5,
+    hoverOpacity: 0.8,
 
     // Normally, the component chooses its size based on the container size, as
     // the CSS formats it. If CSS doesn't specify a size, then these default
@@ -678,7 +683,7 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
               return d3.interpolate(a, 7);
             })
             .styleTween('opacity', function(d, i, a) {
-              return d3.interpolate(a, 0.8);
+              return d3.interpolate(a, self.get('hoverOpacity'));
             });
 
           if (self.onMouseMove instanceof Function) {
@@ -1438,7 +1443,7 @@ $(function() {
         .attr('transform',
               'translate(0,' + (mainHeight + margins.bottom +
                                 contextMargins.top) + ')')
-        .style('opacity', 0.8)
+        .style('opacity', this.get('hoverOpacity'))
         .attr('d', function(d) { return contextArea(d.values); })
         .style('fill', colorFn);
     },
@@ -1484,7 +1489,7 @@ $(function() {
             .transition()
             .duration(150)
             .styleTween('opacity', function(d, i, a) {
-              return d3.interpolate(a, 0.8);
+              return d3.interpolate(a, self.get('hoverOpacity'));
             });
 
           // Update the tooltipDiv contents.
@@ -1530,7 +1535,7 @@ $(function() {
               return d3.interpolate(a, 7);
             })
             .styleTween('opacity', function(d, i, a) {
-              return d3.interpolate(a, 0.8);
+              return d3.interpolate(a, self.get('hoverOpacity'));
             });
 
           prevClosestPoint = closestPoint;
@@ -1565,7 +1570,7 @@ $(function() {
           .transition()
           .duration(150)
           .styleTween('opacity', function(d, i, a) {
-            return d3.interpolate(a, 0.5);
+            return d3.interpolate(a, self.get('startOpacity'));
           });
       };
     }.property(),
@@ -1764,7 +1769,7 @@ $(function() {
       });
 
       return domainSet.toArray();
-    }.property('_data.@each'),
+    }.property('_data.[]'),
 
     yDomain: function() {
       var maxY,
@@ -1903,7 +1908,7 @@ $(function() {
           .attr('y', height)
           .attr('width', xScale.rangeBand())
           .attr('height', 0)
-          .style('opacity', 0.5)
+          .style('opacity', this.get('startOpacity'))
           .on('mousemove', this.get('_handleMouseMove'))
           .on('mouseout', this.get('_handleMouseOut'));
 
@@ -1970,7 +1975,8 @@ $(function() {
       };
     }.property(),
     _handleMouseOut: function() {
-      var elementId = this.get('elementId');
+      var self = this,
+          elementId = this.get('elementId');
       return function() {
         // Hide the tooltip.
         $('#' + elementId + ' .ev-chart-tooltip')
@@ -1985,7 +1991,7 @@ $(function() {
           .transition()
           .duration(150)
           .styleTween('opacity', function(d, i, a) {
-            return d3.interpolate(a, 0.5);
+            return d3.interpolate(a, self.get('startOpacity'));
           });
       };
     }.property(),
@@ -2016,4 +2022,118 @@ $(function() {
   });
 
   Ember.Handlebars.helper('bar-chart', Ember.EmberViz.BarChartComponent);
+});
+
+$(function() {
+  Ember.EmberViz.PieChartComponent = Ember.EmberViz.BaseComponent.extend({
+
+    // By default, just use the data points in the order they were passed in.
+    sortFn: null,
+
+    getValue: function(elem) {
+      return Ember.get(elem, 'value');
+    },
+    radius: function() {
+      return Math.min(this.get('svgHeight'), this.get('svgWidth')) / 2;
+    }.property('svgHeight', 'svgWidth'),
+
+    _data: function() {
+      var data = this.get('data'),
+          getValue = this.get('getValue'),
+          result = [];
+
+      if (!(data instanceof Array)) {
+        console.error('The provided `data` attribute is not an Array.',
+          SEE_DOCUMENTATION_MSG);
+        return result;
+      }
+
+      return data.map(function(elem) {
+
+        return Ember.Object.create({
+          key: Ember.get(elem, 'key'),
+          value: getValue(elem),
+          original: elem
+        });
+      });
+    }.property('data.[]', 'getValue'),
+
+    pieFn: function() {
+      return d3.layout.pie()
+        .sort(this.get('sortFn'))
+        .value(function(d) { return d.get('value'); });
+    }.property('data.[]', 'sortFn'),
+
+    _handleMouseMove: function() {
+      var self = this;
+      return function() {
+        d3.select(this)
+          .transition()
+          .duration(150)
+          .styleTween('opacity', function(d, i, a) {
+            return d3.interpolate(a, self.get('hoverOpacity'));
+          });
+      };
+    }.property(),
+
+    _handleMouseOut: function() {
+      var self = this;
+      return function() {
+        d3.select(this)
+          .transition()
+          .duration(150)
+          .styleTween('opacity', function(d, i, a) {
+            return d3.interpolate(a, self.get('startOpacity'));
+          });
+      };
+    }.property(),
+
+    _render: function() {
+
+      if (!this.get('shouldRender')) {
+        return;
+      }
+
+      // Clear the div.
+      this.$().empty();
+
+      this._addChartContainer();
+
+      if (Ember.isEmpty(this.get('_data'))) {
+        return;
+      }
+
+      var svg = d3.select('#' + this.get('elementId') + ' svg')
+        .append('g')
+        .attr("transform", "translate(" + this.get('svgWidth') / 2 + "," + this.get('svgHeight') / 2 + ")");
+
+      var pie = this.get('pieFn'),
+          data = this.get('_data');
+      var g = svg.selectAll(".arc")
+          .data(pie(data))
+        .enter().append("g")
+          .attr("class", "arc")
+          .style('opacity', this.get('startOpacity'))
+          .on('mousemove', this.get('_handleMouseMove'))
+          .on('mouseout', this.get('_handleMouseOut'));
+
+      var arc = d3.svg.arc()
+          .outerRadius(this.get('radius') - 10)
+          .innerRadius(0);
+
+      g.append("path")
+        .attr("d", arc)
+        .style("fill", this.get('colorFn'));
+
+      g.append("text")
+      .style('opacity', 1)
+      .attr("transform", function(d) { return "translate(" + arc.centroid(d) + ")"; })
+      .attr("dy", ".35em")
+      .style("text-anchor", "middle")
+      .text(function(d) { return d.data.get('key'); });
+
+    }.observes('_data'),
+  });
+
+  Ember.Handlebars.helper('pie-chart', Ember.EmberViz.PieChartComponent);
 });
