@@ -1221,7 +1221,7 @@ $(function() {
     y2Scale: function() {
       return d3.scale.linear()
         .domain(this.get('y2Domain'))
-        .range([this.get('_contextChartHeight'), 0]);
+        .range([this.get('_contextChartHeight') - this.get('contextMargins.top'), 0]);
     }.property('y2Domain', '_contextChartHeight'),
     x2Axis: function() {
       return d3.svg.axis()
@@ -1349,7 +1349,8 @@ $(function() {
           return Ember.Object.create({
             key: series.key,
             values: valuesCopy,
-            disabled: series.disabled
+            disabled: series.disabled,
+            color: series.color
           });
         });
       } catch(e) {
@@ -1442,7 +1443,7 @@ $(function() {
         .attr('class', 'ev-context-area')
         .attr('transform',
               'translate(0,' + (mainHeight + margins.bottom +
-                                contextMargins.top) + ')')
+                                contextMargins.top + 5) + ')')
         .style('opacity', this.get('hoverOpacity'))
         .attr('d', function(d) { return contextArea(d.values); })
         .style('fill', colorFn);
@@ -1484,14 +1485,6 @@ $(function() {
           html = self.get('tooltipContentFn')(closestPoint.x, closestPoint.y, closestPoint.originalj,
                                               elemInfo.get('key'));
 
-          // Change the opacity of the target element.
-          d3.select(this)
-            .transition()
-            .duration(150)
-            .styleTween('opacity', function(d, i, a) {
-              return d3.interpolate(a, self.get('hoverOpacity'));
-            });
-
           // Update the tooltipDiv contents.
           $tooltipDiv.html(html);
 
@@ -1502,11 +1495,6 @@ $(function() {
             .css('display', 'inline')
             .css('left', newLeft)
             .css('top', newTop);
-            // .animate({
-            //   left: newLeft,
-            //   top: newTop
-            // }, 150);
-
 
           // Determine if the new location of the tooltip goes off the window
           // and move it inside the window if that's the case.
@@ -1564,14 +1552,6 @@ $(function() {
         // Hide the tooltip circle.
         d3.select('#' + elementId + ' .ev-tooltip-circle')
           .style('display', 'none');
-
-        // Change the opacity of the target element.
-        d3.select(this)
-          .transition()
-          .duration(150)
-          .styleTween('opacity', function(d, i, a) {
-            return d3.interpolate(a, self.get('startOpacity'));
-          });
       };
     }.property(),
     tooltipContentFn: function() {
