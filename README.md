@@ -3,8 +3,9 @@ EmberViz
 
 TODO
 -----
+- Consider moving back to observers
+- Add force graphs
 - Add ability to move legend code above main chart.
-- Consolidate the legend code between charts.
 - Add non-stacked bar charts.
 - More thorough documentation, especially event handlers.
 - Show some indication that no data was provided.
@@ -15,6 +16,8 @@ TODO
 
 Done
 ----
+- Make legends available for area charts
+- Consolidate the legend code between charts.
 - Add basic pie charts
 - Fix context chart axis when data changes
 - Axis labels for multi-year, maybe even just show the year if the data being
