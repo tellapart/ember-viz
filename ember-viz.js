@@ -1,7 +1,7 @@
 (function() {
   Ember.EmberViz = Ember.Namespace.create();
 
-  Ember.libraries.register('EmberViz', '0.1.9');
+  Ember.libraries.register('EmberViz', '0.1.10');
 })();
 
 var MILLISECONDS_IN_MINUTE = 60000;
