@@ -4,9 +4,10 @@ EmberViz
 TODO
 -----
 - Consider moving back to observers
+- Along with previous, make rerendering smarter
+- Make stacked/grouped bar chart toggle button available
 - Add force graphs
 - Add ability to move legend code above main chart.
-- Add non-stacked bar charts.
 - More thorough documentation, especially event handlers.
 - Show some indication that no data was provided.
 - Build process to separate out the different components.
@@ -16,6 +17,7 @@ TODO
 
 Done
 ----
+- Add non-stacked bar charts.
 - Make legends available for area charts
 - Consolidate the legend code between charts.
 - Add basic pie charts

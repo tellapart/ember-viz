@@ -1,7 +1,7 @@
 (function() {
   Ember.EmberViz = Ember.Namespace.create();
 
-  Ember.libraries.register('EmberViz', '0.1.10');
+  Ember.libraries.register('EmberViz', '0.1.11');
 })();
 
 var MILLISECONDS_IN_MINUTE = 60000;
@@ -1402,7 +1402,6 @@ $(function() {
           return newElem;
         });
 
-        debugger;
         result.push(Ember.Object.create({
           key: Ember.get(series, 'key'),
           values: valuesCopy,
@@ -1420,6 +1419,7 @@ $(function() {
         .y0(function(d) { return self.get('yScale')(d.y0); })
         .y1(function(d) { return self.get('yScale')(d.y0 + d.y); });
     }.property('xScale', 'yScale'),
+
     contextArea: function() {
       var x2Scale = this.get('x2Scale'),
           y2Scale = this.get('y2Scale');
@@ -1842,13 +1842,19 @@ $(function() {
 });
 $(function() {
   Ember.EmberViz.BarChartComponent = Ember.EmberViz.BaseComponent.extend({
-    stacked: true,
+    stacked: false,
 
     xScale: function() {
       return d3.scale.ordinal()
         .domain(this.get('xDomain'))
         .rangeRoundBands([0, this.get('_mainChartWidth')], 0.08);
     }.property('xDomain', '_mainChartWidth'),
+
+    x2Scale: function() {
+      return d3.scale.ordinal()
+        .domain(this.get('x2Domain'))
+        .rangeRoundBands([0, this.get('xScale').rangeBand()]);
+    }.property('x2Domain', 'xScale'),
 
     yScale: function() {
       return d3.scale.linear()
@@ -1857,30 +1863,53 @@ $(function() {
     }.property('yDomain', '_mainChartHeight'),
 
     xDomain: function() {
-      var data = this.get('_data'),
-          domainSet = new Ember.Set();
+      if (this.get('stacked')) {
+        var data = this.get('_data'),
+            domainSet = new Ember.Set();
 
-      if (data.length === 0) {
+        if (data.length === 0) {
+          return [];
+        }
+
+        data.forEach(function(series) {
+          domainSet.addEach(series.get('values').getEach('x'));
+        });
+
+        return domainSet.toArray();
+      } else {
+        return this.get('_data').getEach('x');
+      }
+    }.property('_data.[]'),
+
+    x2Domain: function() {
+      if (this.get('stacked')) {
         return [];
       }
 
-      data.forEach(function(series) {
-        domainSet.addEach(series.get('values').getEach('x'));
-      });
+      var data = this.get('_data');
 
-      return domainSet.toArray();
+      return data[0].get('values').getEach('key');
     }.property('_data.[]'),
 
     yDomain: function() {
       var maxY,
           data = this.get('_data');
-      maxY = d3.max(data, function(series) {
-        return d3.max(series.values, function(elem) {
-          return elem.y0 + elem.y;
+
+      if (this.get('stacked')) {
+        maxY = d3.max(data, function(series) {
+          return d3.max(series.values, function(elem) {
+            return elem.y0 + elem.y;
+          });
         });
-      });
+      } else {
+        maxY = d3.max(data, function(group) {
+          return d3.max(group.get('values'), function(value) {
+            return value.get('value');
+          });
+        });
+      }
       return [0, maxY];
-    }.property('_data.@each', 'stacked'),
+    }.property('_data.[]', 'stacked'),
 
     xAxis: function() {
       return d3.svg.axis()
@@ -1894,7 +1923,8 @@ $(function() {
       var result = [],
           data = this.get('data'),
           getX = this.get('getX'),
-          getY = this.get('getY');
+          getY = this.get('getY'),
+          stacked = this.get('stacked');
 
       // Verify that the getX and getY attributes are functions.
       if (typeof getX !== 'function') {
@@ -1959,6 +1989,7 @@ $(function() {
 
           return Ember.Object.create({
             key: Ember.get(series, 'key'),
+            color: Ember.get(series, 'color'),
             values: valuesCopy,
             disabled: Ember.get(series, 'disabled')
           });
@@ -1986,10 +2017,71 @@ $(function() {
         });
       });
 
-      return result;
-    }.property('data.[]', 'getX', 'getY'),
+      // If the data is not stacked, regroup the data.
+      if (!stacked) {
+        return result[0].get('values').map(function(elem, index) {
+          var values = result.map(function(series, seriesIndex) {
+            var point = series.get('values')[index];
+            return Ember.Object.create({
+              key: series.get('key'),
+              color: series.get('color'),
+              value: point.y,
+              original: point.original
+            });
+          });
 
-    _addBarLines: function() {
+          return Ember.Object.create({
+            x: elem.x,
+            values: values
+          });
+        });
+      }
+
+      return result;
+    }.property('data.[]', 'getX', 'getY', 'stacked'),
+
+    _addGroupedBarLines: function() {
+      var elementId = this.get('elementId'),
+          data = this.get('_data'),
+          colorFn = this.get('colorFn'),
+          xScale = this.get('xScale'),
+          x2Scale = this.get('x2Scale'),
+          yScale = this.get('yScale'),
+          height = this.get('_mainChartHeight'),
+          g = d3.select('#' + elementId + ' .ev-main');
+
+      var layer = g.selectAll('.layer')
+          .data(data)
+        .enter()
+          .append('g')
+          .attr('class', 'layer')
+          .attr("transform", function(d) {
+              return "translate(" + xScale(d.get('x')) + ",0)";
+            });
+
+
+      var rect = layer.selectAll('rect')
+          .data(function(d) { return d.get('values'); })
+        .enter()
+          .append('rect')
+          .attr('x', function(d) { return x2Scale(d.get('key')); })
+          .attr('y', height)
+          .attr('width', x2Scale.rangeBand())
+          .attr('height', 0)
+          .style('fill', colorFn)
+          .style('opacity', this.get('startOpacity'))
+          .on('mousemove', this.get('_handleMouseMove'))
+          .on('mouseout', this.get('_handleMouseOut'));
+
+      rect.transition()
+        .delay(function(d, i) { return i * 10; })
+        .attr('y', function(d) { return yScale(d.get('value')); })
+        .attr('height', function(d) {
+            return height - yScale(d.get('value'));
+          });
+
+    },
+    _addStackedBarLines: function() {
       var elementId = this.get('elementId'),
           data = this.get('_data'),
           colorFn = this.get('colorFn'),
@@ -2041,15 +2133,28 @@ $(function() {
         var newLeft,
             newTop,
             widthPastWindow,
+            html,
+            position,
+            xPosition,
+            yPosition,
             margins = self.get('margins'),
-            position = d3.mouse(this),
-            xPosition = position[0],
-            yPosition = position[1],
             $tooltipDiv = self.$(' .ev-chart-tooltip'),
             elemInfo = d3.event.target.__data__,
             parentInfo = d3.event.target.parentNode.__data__,
-            html = self.get('tooltipContentFn')(elemInfo.x, elemInfo.y, elemInfo,
-                                                parentInfo.get('key'));
+            stacked = self.get('stacked');
+
+        if (stacked) {
+          html = self.get('tooltipContentFn')(elemInfo.x, elemInfo.y, elemInfo,
+                                              parentInfo.get('key'));
+          position = d3.mouse(this);
+        } else {
+          html = self.get('tooltipContentFn')(parentInfo.x, elemInfo.value,
+                                              elemInfo, elemInfo.key);
+          position = d3.mouse(this.parentElement.parentElement);
+        }
+
+        xPosition = position[0];
+        yPosition = position[1];
 
         // Change the opacity of the target element.
         d3.select(this)
@@ -2079,6 +2184,7 @@ $(function() {
         }
       };
     }.property(),
+
     _handleMouseOut: function() {
       var self = this,
           elementId = this.get('elementId');
@@ -2117,7 +2223,12 @@ $(function() {
       }
 
       this._addMainAxes();
-      this._addBarLines();
+
+      if (this.get('stacked')) {
+        this._addStackedBarLines();
+      } else {
+        this._addGroupedBarLines();
+      }
 
       if (this.get('showTooltip')) {
         this._addTooltip();
