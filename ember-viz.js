@@ -1,7 +1,7 @@
 (function() {
   Ember.EmberViz = Ember.Namespace.create();
 
-  Ember.libraries.register('EmberViz', '0.1.11');
+  Ember.libraries.register('EmberViz', '0.1.12');
 })();
 
 var MILLISECONDS_IN_MINUTE = 60000;
@@ -187,6 +187,21 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
 
       return timeFormatter('%m/%d %H:%M');
     },
+    _getAverageGranularity: function(data) {
+      var count = 0;
+      var total = 0;
+      data.forEach(function(series) {
+        for (var i = 1; i < series.values.length; i++) {
+          var x0 = series.values[i - 1].x;
+          var x1 = series.values[i].x;
+
+          count++;
+          total += x1 - x0;
+        }
+      });
+      return total / count;
+    },
+
 
     _addChartContainer: function() {
 
@@ -317,6 +332,83 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
       });
       this.set('_legendActualHeight', $legendDiv.outerHeight());
     },
+    _addContextAxis: function() {
+      var mainChartHeight = this.get('_mainChartHeight'),
+          contextChartHeight = this.get('_contextChartHeight'),
+          margins = this.get('margins'),
+          contextMargins = this.get('contextMargins');
+
+      // Add the context x-axis.
+      d3.select('#' + this.get('elementId') + ' .ev-main')
+        .append('g')
+        .attr('class', 'ev-axis context-x-axis')
+        .attr('transform',
+             'translate(0,' + (mainChartHeight + margins.bottom +
+                               contextChartHeight + contextMargins.top) + ')')
+        .call(this.get('x2Axis'));
+    },
+    _addContextBrush: function() {
+      var contextG,
+          brushBG,
+          gBrush,
+          brushBGenter,
+          elementId = this.get('elementId'),
+          g = d3.select('#' + elementId + ' .ev-main'),
+          _mainChartHeight = this.get('_mainChartHeight'),
+          margins = this.get('margins'),
+          contextMargins = this.get('contextMargins'),
+          _contextChartHeight = this.get('_contextChartHeight'),
+          brush = this.get('brush');
+      contextG = g.append('g')
+        .attr('class', 'ev-brush')
+        .attr('transform',
+              'translate(0,' + (_mainChartHeight + margins.bottom +
+                                contextMargins.top) + ')');
+      contextG.append('g')
+        .attr('class', 'ev-context-brush-background');
+      gBrush = contextG.append('g')
+        .attr('class', 'ev-context-brush');
+
+      brushBG = contextG.select('.ev-context-brush-background').selectAll('g')
+        .data([brush.extent()]);
+
+      brushBGenter = brushBG.enter()
+        .append('g');
+
+      brushBGenter.append('rect')
+        .attr('class', 'left')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('height', _contextChartHeight);
+
+      brushBGenter.append('rect')
+        .attr('class', 'right')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('height', _contextChartHeight);
+
+      // Taken from crossfilter (http://square.github.com/crossfilter/)
+      function resizePath(d) {
+        var e = +(d === 'e'),
+            x = e ? 1 : -1,
+            y = _contextChartHeight / 3;
+        return 'M' + (0.5 * x) + ',' + y +
+          'A6,6 0 0 ' + e + ' ' + (6.5 * x) + ',' + (y + 6) +
+          'V' + (2 * y - 6) +
+          'A6,6 0 0 ' + e + ' ' + (0.5 * x) + ',' + (2 * y) +
+          'Z'+
+          'M' + (2.5 * x) + ',' + (y + 8) +
+          'V' + (2 * y - 8) +
+          'M' + (4.5 * x) + ',' + (y + 8) +
+          'V' + (2 * y - 8);
+      }
+      gBrush
+        .call(brush);
+      gBrush.selectAll('rect')
+        .attr('height', _contextChartHeight);
+      gBrush.selectAll('.resize').append('path').attr('d', resizePath);
+      this._updateBrushBG();
+    },
 
     _handleMouseOut: function() {
       var elementId = this.get('elementId');
@@ -360,7 +452,7 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
         domain = brushExtent;
       }
       return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
-    }.property('_data', 'showContext', 'brushExtent', 'forceX'),
+    }.property('_data.[]', 'showContext', 'brushExtent', 'forceX'),
     yDomain: function() {
       var domain,
           data = this.get('_data'),
@@ -508,14 +600,14 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
       var domain = Ember.EmberViz.Helpers.getDomain(this.get('_data'),
                                                    function(d) { return d.x; });
       return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
-    }.property('_data', 'forceX'),
+    }.property('_data.[]', 'forceX'),
     y2Domain: function() {
       var data = this.get('_data');
 
       return Ember.EmberViz.Helpers.getDomain(data,
                                               function(d) { return d.y; });
 
-    }.property('_data', 'brushExtent'),
+    }.property('_data.[]', 'brushExtent'),
     brush: function() {
       var brush,
           self = this,
@@ -639,20 +731,6 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
       return this._getTimeTickFormatFn(this.get('x2Domain'));
     }.property('_data', 'x2Domain', 'timeFormatter'),
 
-    _getAverageGranularity: function(data) {
-      var count = 0;
-      var total = 0;
-      data.forEach(function(series) {
-        for (var i = 1; i < series.values.length; i++) {
-          var x0 = series.values[i - 1].x;
-          var x1 = series.values[i].x;
-
-          count++;
-          total += x1 - x0;
-        }
-      });
-      return total / count;
-    },
     _data: function() {
       var result = [],
           data = this.get('data'),
@@ -998,68 +1076,6 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
         .attr('d', this.get('contextLineFn'))
         .style('stroke', this.get('colorFn'));
     },
-    _addContextBrush: function() {
-      var contextG,
-          brushBG,
-          gBrush,
-          brushBGenter,
-          elementId = this.get('elementId'),
-          g = d3.select('#' + elementId + ' .ev-main'),
-          _mainChartHeight = this.get('_mainChartHeight'),
-          margins = this.get('margins'),
-          contextMargins = this.get('contextMargins'),
-          _contextChartHeight = this.get('_contextChartHeight'),
-          brush = this.get('brush');
-      contextG = g.append('g')
-        .attr('class', 'ev-brush')
-        .attr('transform',
-              'translate(0,' + (_mainChartHeight + margins.bottom +
-                                contextMargins.top) + ')');
-      contextG.append('g')
-        .attr('class', 'ev-context-brush-background');
-      gBrush = contextG.append('g')
-        .attr('class', 'ev-context-brush');
-
-      brushBG = contextG.select('.ev-context-brush-background').selectAll('g')
-        .data([brush.extent()]);
-
-      brushBGenter = brushBG.enter()
-        .append('g');
-
-      brushBGenter.append('rect')
-        .attr('class', 'left')
-        .attr('x', 0)
-        .attr('y', 0)
-        .attr('height', _contextChartHeight);
-
-      brushBGenter.append('rect')
-        .attr('class', 'right')
-        .attr('x', 0)
-        .attr('y', 0)
-        .attr('height', _contextChartHeight);
-
-      // Taken from crossfilter (http://square.github.com/crossfilter/)
-      function resizePath(d) {
-        var e = +(d === 'e'),
-            x = e ? 1 : -1,
-            y = _contextChartHeight / 3;
-        return 'M' + (0.5 * x) + ',' + y +
-          'A6,6 0 0 ' + e + ' ' + (6.5 * x) + ',' + (y + 6) +
-          'V' + (2 * y - 6) +
-          'A6,6 0 0 ' + e + ' ' + (0.5 * x) + ',' + (2 * y) +
-          'Z'+
-          'M' + (2.5 * x) + ',' + (y + 8) +
-          'V' + (2 * y - 8) +
-          'M' + (4.5 * x) + ',' + (y + 8) +
-          'V' + (2 * y - 8);
-      }
-      gBrush
-        .call(brush);
-      gBrush.selectAll('rect')
-        .attr('height', _contextChartHeight);
-      gBrush.selectAll('.resize').append('path').attr('d', resizePath);
-      this._updateBrushBG();
-    },
     _addMainGrid: function() {
       var g = d3.select('#' + this.get('elementId') + ' .ev-main');
       g.append('g')
@@ -1070,21 +1086,6 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
          .attr('class', 'ev-grid main-x-grid')
          .attr('transform', 'translate(0,' + this.get('_mainChartHeight') + ')')
          .call(this.get('xGrid'));
-    },
-    _addContextAxis: function() {
-      var mainChartHeight = this.get('_mainChartHeight'),
-          contextChartHeight = this.get('_contextChartHeight'),
-          margins = this.get('margins'),
-          contextMargins = this.get('contextMargins');
-
-      // Add the context x-axis.
-      d3.select('#' + this.get('elementId') + ' .ev-main')
-        .append('g')
-        .attr('class', 'ev-axis context-x-axis')
-        .attr('transform',
-             'translate(0,' + (mainChartHeight + margins.bottom +
-                               contextChartHeight + contextMargins.top) + ')')
-        .call(this.get('x2Axis'));
     },
     observesHeight: function() {
       d3.select('#' + this.get('elementId') + ' .ev-svg')
@@ -1259,21 +1260,6 @@ $(function() {
     timeTickFormatFn2: function() {
       return this._getTimeTickFormatFn(this.get('x2Domain'));
     }.property('_data', 'x2Domain', 'timeFormatter'),
-
-    _getAverageGranularity: function(data) {
-      var count = 0;
-      var total = 0;
-      data.forEach(function(series) {
-        for (var i = 1; i < series.values.length; i++) {
-          var x0 = series.values[i - 1].x;
-          var x1 = series.values[i].x;
-
-          count++;
-          total += x1 - x0;
-        }
-      });
-      return total / count;
-    },
 
     clickCommon: function() {
       var g = d3.select('#' + this.get('elementId') + ' .ev-main');
@@ -2020,7 +2006,7 @@ $(function() {
       // If the data is not stacked, regroup the data.
       if (!stacked) {
         return result[0].get('values').map(function(elem, index) {
-          var values = result.map(function(series, seriesIndex) {
+          var values = result.map(function(series) {
             var point = series.get('values')[index];
             return Ember.Object.create({
               key: series.get('key'),
@@ -2371,4 +2357,345 @@ $(function() {
   });
 
   Ember.Handlebars.helper('force-graph', Ember.EmberViz.ForceGraphComponent);
+});
+
+$(function() {
+  Ember.EmberViz.TimelineChartComponent = Ember.EmberViz.BaseComponent.extend({
+    defaultRadius: 5,
+    xDomain: function() {
+      var brushExtent = this.get('brushExtent'),
+          domain = Ember.EmberViz.Helpers.getDomain(this.get('_data'), function(d) { return d.x; });
+      if (this.get('showContext') && !Ember.isNone(brushExtent)) {
+        domain = brushExtent;
+      }
+      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
+    }.property('_data.[]', 'showContext', 'brushExtent', 'forceX'),
+    x2Domain: function() {
+      var domain = Ember.EmberViz.Helpers.getDomain(this.get('_data'),
+                                                   function(d) { return d.x; });
+      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
+    }.property('_data.[]', 'forceX'),
+    yDomain: function() {
+      return this.get('_data').map(function(series) {
+        return series.get('key');
+      });
+    }.property('_data.[]'),
+    xScale: function() {
+      return d3.time.scale.utc().domain(this.get('xDomain')).range([0, this.get('_mainChartWidth')]);
+    }.property('xDomain', '_mainChartWidth'),
+    x2Scale: function() {
+      return d3.time.scale.utc()
+        .domain(this.get('x2Domain'))
+        .range([0, this.get('_contextChartWidth')]);
+    }.property('x2Domain', '_contextChartWidth'),
+    yScale: function() {
+      return d3.scale.ordinal()
+        .domain(this.get('yDomain'))
+        .rangeRoundBands([this.get('_mainChartHeight'), 0]);
+    }.property('yDomain', '_mainChartHeight'),
+    y2Scale: function() {
+      return d3.scale.ordinal()
+        .domain(this.get('yDomain'))
+        .rangeRoundBands([this.get('_contextChartHeight'), 0]);
+    }.property('yDomain', '_contextChartHeight'),
+    yAxis: function() {
+      return d3.svg.axis()
+        .orient('left')
+        .scale(this.get('yScale'))
+        .tickSize(0)
+        .tickPadding(6);
+    }.property('yScale', 'yGridTicks'),
+    xAxis: function() {
+      return d3.svg.axis()
+        .ticks(this.get('xGridTicks'))
+        .scale(this.get('xScale'))
+        .tickPadding(6)
+        .tickFormat(this.get('timeTickFormatFn'));
+    }.property('xScale', 'xGridTicks'),
+    x2Axis: function() {
+      return d3.svg.axis()
+        .orient('bottom')
+        .ticks(this.get('xGridTicks'))
+        .scale(this.get('x2Scale'))
+        .tickFormat(this.get('timeTickFormatFn2'));
+    }.property(),
+    timeTickFormatFn2: function() {
+      return this._getTimeTickFormatFn(this.get('x2Domain'));
+    }.property('_data', 'x2Domain', 'timeFormatter'),
+    brush: function() {
+      var brush,
+          self = this,
+          elementId = this.get('elementId'),
+          brushExtent = this.get('brushExtent'),
+          x2Domain = this.get('x2Domain');
+
+      function onBrush() {
+        var g = d3.select('#' + elementId + ' .ev-main');
+
+        brushExtent = brush.empty() ? null : brush.extent();
+        self.set('brushExtent', brushExtent);
+        var xScale = self.get('xScale');
+
+        g.select('.ev-axis.main-x-axis')
+         .call(self.get('xAxis'));
+        g.select('.ev-axis.main-y-axis')
+         .call(self.get('yAxis'));
+        g.selectAll('.ev-chart-row-line')
+         .attr('x1', function(d) { return xScale(d.values.get('firstObject').x); })
+         .attr('x2', function(d) { return xScale(d.values.get('lastObject').x); });
+        g.selectAll('.ev-chart-bubble')
+         .attr('cx', function(d) { return xScale(d.x); });
+
+        self._updateBrushBG();
+
+        // If the user supplied an onbrush callback, call it.
+        if (self.onBrush instanceof Function) {
+          self.onBrush(brushExtent);
+        }
+      }
+
+      brush = d3.svg.brush()
+        .x(this.get('x2Scale'))
+        .on('brush', onBrush);
+      if (brushExtent) {
+        // Make sure the existing brushExtent fits inside the actual domain
+        //  from the data.
+        if (brushExtent[0] < x2Domain[0]) {
+          brushExtent[0] = x2Domain[0];
+        }
+        if (brushExtent[1] > x2Domain[1]) {
+          brushExtent[1] = x2Domain[1];
+        }
+        brush.extent(brushExtent);
+      }
+      return brush;
+    }.property('x2Scale', 'x2Domain'),
+    _data: function() {
+      var defaultRadius = this.get('defaultRadius');
+
+      return this.get('data').map(function(series, seriesIndex) {
+        var values = Ember.get(series, 'values'),
+            key = Ember.get(series, 'key');
+
+        if (!values || !(values instanceof Array)) {
+          throw 'Invalid Values';
+        }
+        var newValues = values.map(function(elem) {
+          return {
+            x: Ember.get(elem, 'x'),
+            y: key,
+            seriesIndex: seriesIndex,
+            radius: Ember.getWithDefault(elem, 'radius', defaultRadius),
+            color: Ember.get(elem, 'color'),
+            original: elem,
+          };
+
+        });
+        return Ember.Object.create({
+          key: key,
+          values: newValues,
+          color: Ember.get(series, 'color')
+        });
+      });
+    }.property('data.[]', 'defaultRadius'),
+    _addContextLines: function() {
+      // Add the clip path to hide the lines outside of the main window.
+      var elementId = this.get('elementId'),
+          clipPathId = elementId + '-context-clip-path',
+          g = d3.select('#' + elementId + ' .ev-main'),
+          yScale = this.get('y2Scale'),
+          xScale = this.get('x2Scale'),
+          colorFn = this.get('colorFn'),
+          margins = this.get('margins'),
+          contextMargins = this.get('contextMargins');
+
+      g.append('clipPath')
+       .attr('id', clipPathId)
+       .append('rect')
+       .attr('width', this.get('_contextChartWidth'))
+       .attr('height', this.get('_contextChartHeight'));
+
+      var rowEnter = g.append('g')
+       .attr('class', 'ev-context-lines')
+       .attr('transform',
+             'translate(0,' + (this.get('_mainChartHeight') + margins.bottom +
+                               contextMargins.top) + ')')
+       .selectAll('.ev-context-chart-bubble-row')
+       .data(this.get('_data'))
+       .enter();
+
+      rowEnter.append('line')
+        .attr('class', 'ev-context-chart-row-line')
+        .attr('clip-path', 'url(#' + clipPathId + ')')
+        .attr('x1', function(d) { return xScale(d.values.get('firstObject').x); })
+        .attr('x2', function(d) { return xScale(d.values.get('lastObject').x); })
+        .attr('y1', function(d) { return yScale(d.values.get('firstObject').y) + yScale.rangeBand() / 2; })
+        .attr('y2', function(d) { return yScale(d.values.get('lastObject').y) + yScale.rangeBand() / 2; })
+        .style('stroke', colorFn);
+
+      rowEnter.append('g')
+         .attr('class', 'ev-context-chart-bubble-row')
+         .selectAll('.ev-context-chart-bubble')
+          .data(function(d) { return d.get('values'); })
+          .enter()
+            .append('circle')
+            .attr('cx', function(d) { return xScale(d.x); })
+            .attr('cy', function(d) { return yScale(d.y) + yScale.rangeBand() / 2; })
+            .attr('r', function(d) { return 0.3 * d.radius; })
+            .attr('class', 'ev-context-chart-bubble')
+            .attr('clip-path', 'url(#' + clipPathId + ')')
+            .style('fill', function(d) { return colorFn(d, d.seriesIndex); })
+            .style('stroke', function(d) { return colorFn(d, d.seriesIndex); });
+
+    },
+    _addChartLines: function() {
+      // Add the clip path to hide the lines outside of the main window.
+      var elementId = this.get('elementId'),
+          clipPathId = elementId + '-clip-path',
+          g = d3.select('#' + elementId + ' .ev-main'),
+          yScale = this.get('yScale'),
+          xScale = this.get('xScale'),
+          colorFn = this.get('colorFn');
+
+      g.append('clipPath')
+       .attr('id', clipPathId)
+       .append('rect')
+       .attr('width', this.get('_mainChartWidth'))
+       .attr('height', this.get('_mainChartHeight'));
+
+      var rowEnter = g.append('g')
+       .attr('class', 'ev-chart-lines')
+       .selectAll('.ev-chart-bubble-row')
+       .data(this.get('_data'))
+       .enter();
+
+      rowEnter.append('line')
+        .attr('class', 'ev-chart-row-line')
+        .attr('clip-path', 'url(#' + clipPathId + ')')
+        .attr('x1', function(d) { return xScale(d.values.get('firstObject').x); })
+        .attr('x2', function(d) { return xScale(d.values.get('lastObject').x); })
+        .attr('y1', function(d) { return yScale(d.values.get('firstObject').y) + yScale.rangeBand() / 2; })
+        .attr('y2', function(d) { return yScale(d.values.get('lastObject').y) + yScale.rangeBand() / 2; })
+        .style('stroke', colorFn);
+
+      rowEnter.append('g')
+        .attr('class', 'ev-chart-bubble-row')
+        .selectAll('.ev-chart-bubble')
+        .data(function(d) { return d.get('values'); })
+        .enter()
+          .append('circle')
+          .attr('cx', function(d) { return xScale(d.x); })
+          .attr('cy', function(d) { return yScale(d.y) + yScale.rangeBand() / 2; })
+          .attr('r', function(d) { return d.radius; })
+          .attr('class', 'ev-chart-bubble')
+          .attr('clip-path', 'url(#' + clipPathId + ')')
+          .style('fill', function(d) { return colorFn(d, d.seriesIndex); })
+          .style('stroke', function(d) { return colorFn(d, d.seriesIndex); })
+          .on('mousemove', this.get('_handleMouseMove'))
+          .on('mouseout', this.get('_handleMouseOut'));
+    },
+    tooltipContentFn: function() {
+      var timeFormatFn = this.get('timeFormatFn');
+
+      return function(x, y) {
+        return '<h5>' + y+ '</h5>' +
+               '<hr />' +
+               '<p>' + timeFormatFn(new Date(x)) + '</p>';
+      };
+    }.property('valueFormatFn', 'timeFormatFn'),
+    timeFormatFn: function() {
+      var data = this.get('_data'),
+          timeFormatter = this.get('timeFormatter'),
+          avgGranularity = this._getAverageGranularity(data);
+
+      // If the average granularity is around or greater than one point per day,
+      // only show month and date.
+      if (avgGranularity >= 0.85 * MILLISECONDS_IN_DAY) {
+        return timeFormatter('%m/%d');
+      }
+
+      // If the average granularity is less than a minute, show the month, date,
+      // hour, minute, and second.
+      if (avgGranularity <= MILLISECONDS_IN_MINUTE) {
+        return timeFormatter('%m/%d %H:%M:%S');
+      }
+
+      // Otherwise, show month, date, hour, and minute.
+      return timeFormatter('%m/%d %H:%M');
+    }.property('_data', 'timeFormatter'),
+
+    _handleMouseMove: function() {
+      var self = this;
+
+      return function(d) {
+        var html,
+            newLeft,
+            newTop,
+            margins = self.get('margins'),
+            $tooltipDiv = self.$(' .ev-chart-tooltip'),
+            yScale = self.get('yScale'),
+            xScale = self.get('xScale');
+
+        html = self.get('tooltipContentFn')(d.x, d.y, d.original);
+
+        // Update the tooltipDiv contents.
+        $tooltipDiv.html(html);
+
+        // Move the tooltip div to the current bubble's location.
+        newLeft = xScale(d.x) + margins.left;
+        // TODO: Figure out why 10px adjustment was necessary?
+        newTop = yScale(d.y) + yScale.rangeBand() / 2 + margins.top + 10 -
+          $tooltipDiv.height();
+        $tooltipDiv
+            .css('display', 'inline')
+            .css('left', newLeft)
+            .css('top', newTop);
+
+        if (self.onMouseMove instanceof Function) {
+          self.onMouseMove(d.original);
+        }
+      };
+    }.property(),
+    _handleMouseOut: function() {
+      var self = this;
+
+      return function(d) {
+
+        self.$(' .ev-chart-tooltip').hide();
+        if (self.onMouseOut instanceof Function) {
+          self.onMouseOut(d.original);
+        }
+      };
+    }.property(),
+    _render: function() {
+      window.comp = this;
+
+      if (!this.get('shouldRender') || !this.$()) {
+        return;
+      }
+
+      // Clear the div.
+      this.$().empty();
+
+      this._addChartContainer();
+
+      if (Ember.isEmpty(this.get('_data'))) {
+        return;
+      }
+      this._addMainAxes();
+      this._addChartLines();
+
+      if (this.get('showTooltip')) {
+        this._addTooltip();
+      }
+
+      if (this.get('showContext')) {
+        this._addContextAxis();
+        this._addContextLines();
+        this._addContextBrush();
+      }
+    }.observes('_data.[]', 'showContext')
+  });
+
+  Ember.Handlebars.helper('timeline-chart', Ember.EmberViz.TimelineChartComponent);
 });
