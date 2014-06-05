@@ -18,6 +18,7 @@ TODO
 
 Done
 ----
+- Add ability to assign classNames to each series for all chart types
 - Add timeline chart.
 - Add non-stacked bar charts.
 - Make legends available for area charts.

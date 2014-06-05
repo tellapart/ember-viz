@@ -44,12 +44,22 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
     },
     arePointsEqual: function(p1, p2) {
       return p1 && p2 && p1.x === p2.x && p1.y === p2.y;
+    },
+
+    createClassNameFunction: function(className) {
+      return function(d) {
+        if (Ember.isNone(d.classNames)) {
+          return className;
+        }
+        return className + ' ' + d.classNames;
+      };
     }
   });
 })();
 
 (function() {
   Ember.EmberViz.BaseComponent = Ember.Component.extend({
+    classNames: ['ev-chart'],
     margins: {top: 20, right: 20, bottom: 30, left: 50},
     contextMargins: {top: 10, right: 20, bottom: 30, left: 50},
     legendMargins: {top: 0, right: 50, bottom: 0, left: 50},
@@ -796,7 +806,8 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
             key: Ember.get(series, 'key'),
             color: Ember.get(series, 'color'),
             values: valuesCopy,
-            disabled: Ember.get(series, 'disabled')
+            disabled: Ember.get(series, 'disabled'),
+            classNames: Ember.get(series, 'classNames')
           });
         });
       } catch(e) {
@@ -1051,7 +1062,7 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
        .data(this.get('_data'))
        .enter()
         .append('path')
-        .attr('class', 'ev-chart-line')
+        .attr('class', Ember.EmberViz.Helpers.createClassNameFunction('ev-chart-line'))
         .attr('clip-path', 'url(#' + clipPathId + ')')
         .attr('d', this.get('lineFn'))
         .style('stroke', this.get('colorFn'));
@@ -1140,6 +1151,7 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
 
 $(function() {
   Ember.EmberViz.AreaChartComponent = Ember.EmberViz.BaseComponent.extend({
+    classNames: ['ev-area-chart'],
     showContext: false,
     brushExtent: null,
     yDomain: function() {
@@ -1352,7 +1364,8 @@ $(function() {
             key: Ember.get(series, 'key'),
             values: valuesCopy,
             disabled: Ember.get(series, 'disabled'),
-            color: Ember.get(series, 'color')
+            color: Ember.get(series, 'color'),
+            classNames: Ember.get(series, 'classNames')
           });
         });
       } catch(e) {
@@ -1392,7 +1405,8 @@ $(function() {
           key: Ember.get(series, 'key'),
           values: valuesCopy,
           disabled: Ember.get(series, 'disabled'),
-          color: Ember.get(series, 'color')
+          color: Ember.get(series, 'color'),
+          classNames: Ember.get(series, 'classNames')
         }));
       });
       return result;
@@ -1516,7 +1530,7 @@ $(function() {
           .attr('class', 'ev-series');
 
       series.append('path')
-        .attr('class', 'ev-area')
+        .attr('class', Ember.EmberViz.Helpers.createClassNameFunction('ev-area'))
         .attr('clip-path', 'url(#' + clipPathId + ')')
         .style('opacity', 0.6)
         .attr('d', function(d) { return area(d.values); })
@@ -1828,6 +1842,7 @@ $(function() {
 });
 $(function() {
   Ember.EmberViz.BarChartComponent = Ember.EmberViz.BaseComponent.extend({
+    classNames: ['ev-bar-chart'],
     stacked: false,
 
     xScale: function() {
@@ -1977,7 +1992,8 @@ $(function() {
             key: Ember.get(series, 'key'),
             color: Ember.get(series, 'color'),
             values: valuesCopy,
-            disabled: Ember.get(series, 'disabled')
+            disabled: Ember.get(series, 'disabled'),
+            classNames: Ember.get(series, 'classNames')
           });
         });
       } catch(e) {
@@ -2050,6 +2066,7 @@ $(function() {
           .data(function(d) { return d.get('values'); })
         .enter()
           .append('rect')
+          .attr('class', Ember.EmberViz.Helpers.createClassNameFunction('ev-area'))
           .attr('x', function(d) { return x2Scale(d.get('key')); })
           .attr('y', height)
           .attr('width', x2Scale.rangeBand())
@@ -2087,6 +2104,7 @@ $(function() {
           .data(function(d) { return d.values; })
         .enter()
           .append('rect')
+          .attr('class', Ember.EmberViz.Helpers.createClassNameFunction('ev-bar'))
           .attr('x', function(d) { return xScale(d.x); })
           .attr('y', height)
           .attr('width', xScale.rangeBand())
@@ -2228,6 +2246,7 @@ $(function() {
 
 $(function() {
   Ember.EmberViz.PieChartComponent = Ember.EmberViz.BaseComponent.extend({
+    classNames: ['ev-pie-chart'],
 
     // By default, just use the data points in the order they were passed in.
     sortFn: null,
@@ -2255,7 +2274,8 @@ $(function() {
         return Ember.Object.create({
           key: Ember.get(elem, 'key'),
           value: getValue(elem),
-          original: elem
+          original: elem,
+          classNames: Ember.get(elem, 'classNames')
         });
       });
     }.property('data.[]', 'getValue'),
@@ -2314,7 +2334,7 @@ $(function() {
       var g = svg.selectAll(".arc")
           .data(pie(data))
         .enter().append("g")
-          .attr("class", "arc")
+          .attr('class', Ember.EmberViz.Helpers.createClassNameFunction('ev-arc'))
           .style('opacity', this.get('startOpacity'))
           .on('mousemove', this.get('_handleMouseMove'))
           .on('mouseout', this.get('_handleMouseOut'));
@@ -2342,6 +2362,7 @@ $(function() {
 
 $(function() {
   Ember.EmberViz.ForceGraphComponent = Ember.EmberViz.BaseComponent.extend({
+    classNames: ['ev-force-graph'],
     _render: function() {
 
       if (!this.get('shouldRender') || !this.$()) {
@@ -2361,6 +2382,7 @@ $(function() {
 
 $(function() {
   Ember.EmberViz.TimelineChartComponent = Ember.EmberViz.BaseComponent.extend({
+    classNames: ['ev-timeline-chart'],
     defaultRadius: 5,
     xDomain: function() {
       var brushExtent = this.get('brushExtent'),
@@ -2494,7 +2516,8 @@ $(function() {
         return Ember.Object.create({
           key: key,
           values: newValues,
-          color: Ember.get(series, 'color')
+          color: Ember.get(series, 'color'),
+          classNames: Ember.get(series, 'classNames')
         });
       });
     }.property('data.[]', 'defaultRadius'),
@@ -2570,7 +2593,7 @@ $(function() {
        .enter();
 
       rowEnter.append('line')
-        .attr('class', 'ev-chart-row-line')
+        .attr('class', Ember.EmberViz.Helpers.createClassNameFunction('ev-timeline-chart-row-line'))
         .attr('clip-path', 'url(#' + clipPathId + ')')
         .attr('x1', function(d) { return xScale(d.values.get('firstObject').x); })
         .attr('x2', function(d) { return xScale(d.values.get('lastObject').x); })
@@ -2587,7 +2610,7 @@ $(function() {
           .attr('cx', function(d) { return xScale(d.x); })
           .attr('cy', function(d) { return yScale(d.y) + yScale.rangeBand() / 2; })
           .attr('r', function(d) { return d.radius; })
-          .attr('class', 'ev-chart-bubble')
+          .attr('class', Ember.EmberViz.Helpers.createClassNameFunction('ev-chart-bubble'))
           .attr('clip-path', 'url(#' + clipPathId + ')')
           .style('fill', function(d) { return colorFn(d, d.seriesIndex); })
           .style('stroke', function(d) { return colorFn(d, d.seriesIndex); })
