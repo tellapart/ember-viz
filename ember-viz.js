@@ -2462,7 +2462,7 @@ $(function() {
          .call(self.get('xAxis'));
         g.select('.ev-axis.main-y-axis')
          .call(self.get('yAxis'));
-        g.selectAll('.ev-chart-row-line')
+        g.selectAll('.ev-timeline-chart-row-line')
          .attr('x1', function(d) { return xScale(d.values.get('firstObject').x); })
          .attr('x2', function(d) { return xScale(d.values.get('lastObject').x); });
         g.selectAll('.ev-chart-bubble')
