@@ -684,6 +684,10 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
           timeFormatFn = this.get('timeFormatFn');
 
       return function(x, y, elem, seriesName) {
+        if (seriesName == "") {
+          return '<p>' + valueFormatFn(y) + ' at ' +
+                 timeFormatFn(new Date(x)) + '</p>'; }
+
         return '<h5>' + seriesName + '</h5>' +
                '<hr />' +
                '<p>' + valueFormatFn(y) + ' at ' +
@@ -1673,7 +1677,12 @@ $(function() {
       var valueFormatFn = this.get('valueFormatFn'),
           timeFormatFn = this.get('timeFormatFn');
 
+
       return function(x, y, elem, seriesName) {
+        if (seriesName == "") {
+          return '<p>' + valueFormatFn(y) + ' at ' +
+                 timeFormatFn(new Date(x)) + '</p>'; }
+
         return '<h5>' + seriesName + '</h5>' +
                '<hr />' +
                '<p>' + valueFormatFn(y) + ' at ' +
@@ -2123,6 +2132,9 @@ $(function() {
       var valueFormatFn = this.get('valueFormatFn');
 
       return function(x, y, elem, seriesName) {
+        if (seriesName == "") {
+          return '<p>' + valueFormatFn(y) + ' for ' + x + '</p>'; }
+
         return '<h5>' + seriesName + '</h5>' +
                '<hr />' +
                '<p>' + valueFormatFn(y) + ' for ' + x + '</p>';
