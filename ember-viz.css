@@ -80,3 +80,7 @@
 .ev-chart-bubble {
   cursor: pointer;
 }
+
+.ev-no-data-box {
+  text-align: center;
+}
