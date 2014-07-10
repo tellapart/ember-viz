@@ -1102,6 +1102,28 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
          .attr('transform', 'translate(0,' + this.get('_mainChartHeight') + ')')
          .call(this.get('xGrid'));
     },
+    _addNoDataBox: function() {
+      var $noDataDiv = $('<div>').addClass('ev-no-data-box'),
+          $noDataMsg = $('<div>').addClass('ev-no-data-msg');
+      this.$().append($noDataDiv);
+      $noDataDiv.append($noDataMsg);
+      $noDataDiv.css('position', 'absolute')
+          .css('background-color', '#F8F8F8')
+          .height('90%')
+          .width('100%')
+          .css('top', 0);
+      var height = $noDataDiv.height();
+      $noDataMsg.css('position', 'absolute')
+          .css('top', height/2)
+          .css('margin', '0 auto')
+          .width('100%');
+      this._displayNoDataMsg();
+    },
+    _displayNoDataMsg: function() {
+      var noDataMsg = this.getWithDefault('noDataMsg', 'No Data'),
+          $noDataMsg = this.$('.ev-no-data-msg');
+      $noDataMsg.html(noDataMsg);
+    }.observes('noDataMsg'),
     observesHeight: function() {
       d3.select('#' + this.get('elementId') + ' .ev-svg')
         .attr('height', this.get('svgHeight'));
@@ -1120,6 +1142,7 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
       // TODO: replace this with some computed property so we don't need data in
       // the render function.
       if (Ember.isEmpty(this.get('_data'))) {
+        this._addNoDataBox();
         return;
       }
 
