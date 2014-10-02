@@ -460,8 +460,10 @@ var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
           domain = Ember.EmberViz.Helpers.getDomain(this.get('_data'), function(d) { return d.x; });
       if (this.get('showContext') && !Ember.isNone(brushExtent)) {
         domain = brushExtent;
+        return domain;
+      } else {
+        return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
       }
-      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
     }.property('_data.[]', 'showContext', 'brushExtent', 'forceX'),
     yDomain: function() {
       var domain,
@@ -2424,8 +2426,10 @@ $(function() {
           domain = Ember.EmberViz.Helpers.getDomain(this.get('_data'), function(d) { return d.x; });
       if (this.get('showContext') && !Ember.isNone(brushExtent)) {
         domain = brushExtent;
+        return domain;
+      } else {
+        return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
       }
-      return Ember.EmberViz.Helpers.overrideDomain(domain, this.get('forceX'));
     }.property('_data.[]', 'showContext', 'brushExtent', 'forceX'),
     x2Domain: function() {
       var domain = Ember.EmberViz.Helpers.getDomain(this.get('_data'),
