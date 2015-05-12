@@ -1,0 +1,56 @@
+<h4>Line Chart Route</h4>
+
+<button {{action 'randomizeData'}}>Randomize Values</button>
+
+
+<h5>Line Chart with Legend</h5>
+{{ev-line-chart data=chartData
+          selectedPoint=selectedPointA
+             showLegend=true
+            showTooltip=true}}
+
+<h5>Default Behavior</h5>
+{{ev-line-chart data=chartData
+          selectedPoint=selectedPointA
+            showTooltip=true}}
+
+<h5>Tooltip with actions</h5>
+{{#ev-line-chart data=chartData
+          selectedPoint=selectedPointB
+            showTooltip=true}}
+  {{#ev-tooltip selectedPoint=selectedPointB}}
+    {{#if selectedPointB.seriesTitle}}
+      <h5>{{selectedPointB.seriesTitle}}</h5>
+      <hr>
+    {{/if}}
+    <p>{{selectedPointB.point.y}}&nbsp;at&nbsp;{{selectedPointB.point.x}}</p>
+    <button {{action 'triggerAction'}}>triggerAction</button>
+  {{/ev-tooltip}}
+{{/ev-line-chart}}
+
+<h5>Tooltip Actions</h5>
+<ul>
+{{#each elem in actionsList}}
+  <li>{{elem}}</li>
+{{else}}
+  No actions to show.
+{{/each}}
+</ul>
+
+<h5>Linked Charts</h5>
+{{ev-line-chart data=chartData
+          selectedPoint=selectedPointC
+            showTooltip=true}}
+
+{{#ev-line-chart data=chartData
+          selectedPoint=selectedPointC
+            showTooltip=true}}
+  {{#ev-tooltip selectedPoint=selectedPointC}}
+    {{#if selectedPointC.seriesTitle}}
+      <h5>{{selectedPointC.seriesTitle}}</h5>
+      <hr>
+    {{/if}}
+    <p>{{selectedPointC.point.y}}&nbsp;at&nbsp;{{selectedPointC.point.x}}</p>
+    <button {{action 'triggerAction'}}>triggerAction</button>
+  {{/ev-tooltip}}
+{{/ev-line-chart}}

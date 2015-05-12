@@ -1,0 +1,43 @@
+{{ev-main-chart data=_data
+         mainMargins=mainMargins
+          mainHeight=mainHeight
+           mainWidth=mainWidth
+       selectedPoint=selectedPoint
+         showTooltip=showTooltip
+     valueTickFormat=valueTickFormat
+  valueTickFormatter=valueTickFormatter
+      timeTickFormat=timeTickFormat
+       timeFormatter=timeFormatter
+         includeZero=includeZero
+              forceX=forceX
+              forceY=forceY
+             onClick='onClick'
+         brushExtent=brushExtent}}
+{{yield}}
+{{#if _showDefaultTooltip}}
+  {{#ev-tooltip selectedPoint=_correspondingPoint
+                  mainMargins=mainMargins}}
+    {{#if _correspondingPoint.seriesTitle}}
+      <h5>{{_correspondingPoint.seriesTitle}}</h5>
+      <hr>
+    {{/if}}
+    <p>
+      {{ev-format-number _correspondingPoint.point.y formatter=valueFormatter
+                                                        format=valueFormat}}
+      at&nbsp;
+      {{ev-format-time _correspondingPoint.point.x formatter=timeFormatter
+                                                      format=timeFormat}}
+    </p>
+  {{/ev-tooltip}}
+{{/if}}
+{{#if showContext}}
+  {{ev-context-chart data=_data
+            contextHeight=contextHeight
+            contextWidth=contextWidth
+          timeTickFormat=timeTickFormat
+           timeFormatter=timeFormatter
+              brushExtent=brushExtent}}
+{{/if}}
+{{#if showLegend}}
+  {{ev-legend data=_data}}
+{{/if}}

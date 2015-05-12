@@ -1,32 +1,25 @@
-EmberViz
-========
+# Ember-viz-3
 
-TODO
------
-- Clean up timeline-chart.
-- Consider moving back to observers.
-- Along with previous, make rerendering smarter.
-- Make stacked/grouped bar chart toggle button available.
-- Add force graphs.
-- Add ability to move legend code above main chart.
-- More thorough documentation, especially event handlers.
-- Show some indication that no data was provided.
-- Build process to separate out the different components.
-- Move the tooltip div as an element inside the svg? (allows better transitions
-    than jquery)
-- Use arrayComputed for the data attribute?
+This README outlines the details of collaborating on this Ember addon.
 
-Done
-----
-- Add ability to assign classNames to each series for all chart types
-- Add timeline chart.
-- Add non-stacked bar charts.
-- Make legends available for area charts.
-- Consolidate the legend code between charts.
-- Add basic pie charts.
-- Fix context chart axis when data changes.
-- Axis labels for multi-year, maybe even just show the year if the data being
-    displayed isn't the current year.
-- Add area charts.
-- Add stacked bar charts.
-- Add clip path to line-chart.
+## Installation
+
+* `git clone` this repository
+* `npm install`
+* `bower install`
+
+## Running
+
+* `ember server`
+* Visit your app at http://localhost:4200.
+
+## Running Tests
+
+* `ember test`
+* `ember test --server`
+
+## Building
+
+* `ember build`
+
+For more information on using ember-cli, visit [http://www.ember-cli.com/](http://www.ember-cli.com/).

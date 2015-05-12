@@ -1,0 +1,20 @@
+<h4>ContextChart Route</h4>
+
+<button {{action 'randomizeData'}}>Randomize Values</button>
+
+<h5>Default Behavior</h5>
+<div class='row'>
+  {{#each charts as |chart|}}
+    <div class='col-lg-6'>
+      {{ev-line-chart data=chart.data
+                selectedPoint=selectedPoint
+                  showTooltip=chart.showTooltip
+                  brushExtent=brushExtent
+              valueTickFormat=valueTickFormat
+                      onClick='handleClick'
+                  includeZero=true
+                  showContext=chart.showContext}}
+    </div>
+  {{/each}}
+</div>
+

@@ -1,0 +1,20 @@
+/* Styles for the test app */
+html, body {
+  margin: 20px;
+}
+#nav-list {
+  list-style-type: none;
+}
+#nav-list li {
+  display: inline;
+  margin: 0 10px 0 10px;
+}
+
+.col-lg-6 {
+  float: left;
+  width: 50%;
+}
+
+.ev-line-chart {
+  width: 100%;
+}
