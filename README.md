@@ -1,4 +1,4 @@
-# Ember-viz-3
+# Ember-Viz
 
 This README outlines the details of collaborating on this Ember addon.
 
