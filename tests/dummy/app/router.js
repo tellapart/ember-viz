@@ -6,8 +6,8 @@ var Router = Ember.Router.extend({
 });
 
 Router.map(function() {
-  this.resource('line-chart');
-  this.resource('context-chart');
+  this.route('line-chart');
+  this.route('context-chart');
 
   this.route('awesome');
 });

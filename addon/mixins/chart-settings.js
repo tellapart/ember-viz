@@ -5,7 +5,7 @@ var MILLISECONDS_IN_MINUTE = 60000;
 var MILLISECONDS_IN_DAY = MILLISECONDS_IN_MINUTE * 60 * 24;
 
 export default Ember.Mixin.create({
-  data: [],
+  data: Ember.A([]),
   pointSearchRadius: 10,
 
   defaultWidth: 600,
@@ -22,6 +22,7 @@ export default Ember.Mixin.create({
 
   mainMargins: Ember.Object.create({top: 20, right: 20, bottom: 30, left: 50}),
   contextMargins: Ember.Object.create({top: 10, right: 20, bottom: 30, left: 50}),
+  legendMargins: Ember.Object.create({top: 10, right: 20, bottom: 30, left: 50}),
 
   forceX: null,
   forceY: null,

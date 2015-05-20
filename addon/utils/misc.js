@@ -87,7 +87,7 @@ export function sanitizeDataArray(data, getX, getY) {
         values = Ember.get(series, 'values');
 
     if (Ember.isEmpty(values)) {
-      values = [];
+      values = Ember.A([]);
     }
 
     sanitizedValues = values.map(function(elem) {

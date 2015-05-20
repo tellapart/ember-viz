@@ -28,22 +28,21 @@ export default Ember.Component.extend({
   _timeTickFormatFn: Ember.computed('timeFormatter', 'timeTickFormat', function() {
     return this.get('timeFormatter')(this.get('timeTickFormat'));
   }),
-  _dataWithoutPoints: Ember.computed('data.[]', function() {
+  _dataWithoutPoints: Ember.computed('data.[]', 'data.@each.disabled', function() {
     try {
-      return sanitizeDataArray(this.get('data'), this.get('getX'), this.get('getY'));
+      return Ember.A(sanitizeDataArray(this.get('data'), this.get('getX'), this.get('getY')));
     } catch(e) {
       console.error(e);
-      return [];
+      return Ember.A([]);
     }
   }),
 
   _data: Ember.computed('_dataWithoutPoints.[]', 'xScale', 'yScale', function() {
-    // console.log('Recomputing _data in main');
     var xScale = this.get('xScale'),
         yScale = this.get('yScale'),
         xCache = {};
 
-    return this.get('_dataWithoutPoints').map(function(series) {
+    return Ember.A(this.get('_dataWithoutPoints').map(function(series) {
       var newValues = [],
           values = series.get('values');
 
@@ -71,7 +70,7 @@ export default Ember.Component.extend({
         title: series.get('title'),
         values: newValues
       });
-    });
+    }));
   }),
 
   xDomain: Ember.computed('_dataWithoutPoints.[]', 'showContext', 'brushExtent', 'forceX', function() {
@@ -89,7 +88,6 @@ export default Ember.Component.extend({
 
   yDomain: Ember.computed('_dataWithoutPoints.[]', '_data.@each.disabled',
     'showContext', 'brushExtent', 'forceY', 'includeZero', function() {
-    // console.log('yDomain()', arguments[1]);
     var domain,
         data = this.get('_dataWithoutPoints'),
         brushExtent = this.get('brushExtent');
@@ -166,5 +164,10 @@ export default Ember.Component.extend({
       seriesTitle: seriesTitle
     };
 
+  }),
+
+  colorFn: Ember.computed(function() {
+    var colors = d3.scale.category20().range();
+    return function(d, i) { return d.color || colors[i % colors.length]; };
   }),
 });

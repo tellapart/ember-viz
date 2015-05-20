@@ -6,7 +6,7 @@ export default Ember.Controller.extend({
   actionsList: Ember.A([]),
   chartData: Ember.A([
     Ember.Object.create({
-      title: 'Series 1',
+      title: 'Series 0',
       values: [
         {x: 1421971200000, y: 10},
         {x: 1422057600000, y: 20},
@@ -41,6 +41,7 @@ export default Ember.Controller.extend({
 
   actions: {
     randomizeData: function() {
+      console.log('Randomizing data');
       var chartData = this.createRandomSeries();
       this.setProperties({
         chartData: chartData,

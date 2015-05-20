@@ -185,10 +185,6 @@ export default BaseComponent.extend(ChartSettings, {
       self.set('selectedPoint', closestPoint);
     };
   }),
-  colorFn: Ember.computed(function() {
-    var colors = d3.scale.category20().range();
-    return function(d, i) { return d.color || colors[i % colors.length]; };
-  }),
 
   _handleMouseClick: Ember.computed(function() {
     // console.log('Handling hover rect click');
