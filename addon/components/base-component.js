@@ -38,40 +38,49 @@ export default Ember.Component.extend({
   }),
 
   _data: Ember.computed('_dataWithoutPoints.[]', 'xScale', 'yScale', function() {
-    var xScale = this.get('xScale'),
-        yScale = this.get('yScale'),
-        xCache = {};
+    let xCache = {};
 
-    return Ember.A(this.get('_dataWithoutPoints').map(function(series) {
-      var newValues = [],
-          values = series.get('values');
-
-      values.forEach(function(elem) {
-
-        var xPx = xCache[elem.x];
-
-        if (Ember.isNone(xPx)) {
-          xPx = xScale(elem.x);
-          xCache[elem.x] = xPx;
-        }
-        newValues.push({
-          x: elem.x,
-          xPx: xPx,
-          y: elem.y,
-          yPx: yScale(elem.y),
-          original: elem,
-        });
-      });
+    return Ember.A(this.get('_dataWithoutPoints').map((series) => {
+      let values = series.get('values');
 
       return Ember.Object.create({
+        type: series.get('type'),
         classNames: series.get('classNames'),
         color: series.get('color'),
         disabled: series.get('disabled'),
         title: series.get('title'),
-        values: newValues
+        values: this._decoratedValues(values, xCache)
       });
     }));
   }),
+
+  /* Take each data value {x, y} and decorate with
+   * original point, xPx, and yPx.
+   *
+   * xPx and yPx refer to the computed pixel locations of these data values
+   * These values make it easier to do hover comparisons
+   * */
+  _decoratedValues: function(values, xCache) {
+    let xScale = this.get('xScale'),
+        yScale = this.get('yScale');
+
+    return values.map((elem) => {
+      let xPx = xCache[elem.x];
+
+      if (Ember.isNone(xPx)) {
+        xPx = xScale(elem.x);
+        xCache[elem.x] = xPx;
+      }
+
+      return {
+        x: elem.x,
+        xPx: xPx,
+        y: elem.y,
+        yPx: yScale(elem.y),
+        original: elem,
+      };
+    });
+  },
 
   xDomain: Ember.computed('_dataWithoutPoints.[]', 'showContext', 'brushExtent', 'forceX', function() {
     // console.log('xDomain()', arguments[1]);
