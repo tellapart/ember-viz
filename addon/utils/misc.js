@@ -5,26 +5,6 @@ import Ember from 'ember';
 var SEE_DOCUMENTATION_MSG = 'See https://github.com/tellapart/ember-viz for' +
   ' EmberViz usage details.';
 
-export function getAverageGranularity(data) {
-  if (Ember.isEmpty(data)) {
-    return 0;
-  }
-
-  var count = 0;
-  var total = 0;
-  data.forEach(function(series) {
-    var valuesLength = Ember.get(series, 'values.length');
-    for (var i = 1; i < valuesLength; i++) {
-      var x0 = series.values[i - 1].x;
-      var x1 = series.values[i].x;
-
-      count++;
-      total += x1 - x0;
-    }
-  });
-  return total / count;
-}
-
 export function createClassNameFunction(className) {
   return function(d) {
     var classNames = Ember.get(d, 'classNames');

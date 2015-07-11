@@ -21,12 +21,12 @@ export default Ember.Component.extend({
 
     return d3.selectAll('#' + elementId + ' ' + selector);
   },
-  _valueTickFormatFn: Ember.computed('valueTickFormatter', 'valueTickFormat', function() {
-    return this.get('valueTickFormatter')(this.get('valueTickFormat'));
+  _yTickFormatFn: Ember.computed('yTickFormatter', 'yTickFormat', function() {
+    return this.get('yTickFormatter')(this.get('yTickFormat'));
   }),
 
-  _timeTickFormatFn: Ember.computed('timeFormatter', 'timeTickFormat', function() {
-    return this.get('timeFormatter')(this.get('timeTickFormat'));
+  _xTickFormatFn: Ember.computed('xFormatter', 'xTickFormat', function() {
+    return this.get('xFormatter')(this.get('xTickFormat'));
   }),
   _dataWithoutPoints: Ember.computed('data.[]', 'data.@each.disabled', function() {
     try {
