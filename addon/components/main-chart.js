@@ -3,6 +3,8 @@ import ChartSettings from 'ember-viz/mixins/chart-settings';
 import {createClassNameFunction} from 'ember-viz/utils/misc';
 import Ember from 'ember';
 
+let EVIZ_CHARTS_CLASS = 'ev-charts';
+
 export default BaseComponent.extend(ChartSettings, {
   tagName: 'svg',
   classNames: ['ev-main-svg'],
@@ -158,7 +160,7 @@ export default BaseComponent.extend(ChartSettings, {
 
     // Append the main chart lines.
     g.append('g')
-     .attr('class', 'ev-charts')
+     .attr('class', EVIZ_CHARTS_CLASS)
      .attr('clip-path', 'url(#' + this.get('_clipPathId') + ')');
 
     // Append the hover rectangle.
@@ -228,15 +230,11 @@ export default BaseComponent.extend(ChartSettings, {
   }),
 
   _scatterPlotData: Ember.computed('_data.[]', function() {
-    return this.get('data').filterBy('type', 'scatterPlot');
+    return this.get('_data').filterBy('type', 'scatterPlot');
   }),
 
   _lineGraphData: Ember.computed('_data.[]', function() {
-    let data = this.get('_data');
-    return this.get('data').filter(function(elem) {
-      let seriesType = elem.get('type');
-      return seriesType === 'lineGraph' || !seriesType;
-    });
+    return this.get('_data').filterBy('type', 'lineGraph');
   }),
 
   _updateSeries: Ember.observer('xMap', 'yMap', function() {
@@ -244,9 +242,9 @@ export default BaseComponent.extend(ChartSettings, {
     this._updateLineGraphs();
   }),
 
-  _updateScatterPlots: Ember.observer('xMap', 'yMap', function() {
+  _updateScatterPlots() {
     let colorFn = this.get('colorFn'),
-        parent = this.d3('.ev-charts'),
+        parent = this.d3(`.${EVIZ_CHARTS_CLASS}`),
         xMap = this.get('xMap'),
         yMap = this.get('yMap'),
         scatterPlotData = this.get('_scatterPlotData');
@@ -271,11 +269,11 @@ export default BaseComponent.extend(ChartSettings, {
     // Remove old chart lines.
     scatterPlots.exit()
       .remove();
-  }),
+  },
 
   _updateLineGraphs: Ember.observer('lineFn', 'colorFn', function() {
     var colorFn = this.get('colorFn'),
-        elements = this.d3('.ev-charts');
+        elements = this.d3(`.${EVIZ_CHARTS_CLASS}`);
 
     // Apply the new data array to the chart lines.
     elements = elements.selectAll('.ev-chart-line')
