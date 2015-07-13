@@ -98,12 +98,12 @@ export default BaseComponent.extend(ChartSettings, {
     // console.log('yScale()', arguments[1]);
     return d3.scale.linear().domain(this.get('yDomain')).range([this.get('_mainRectHeight'), 0]);
   }),
-  xAxis: Ember.computed('xScale', '_timeTickFormatFn', function() {
+  xAxis: Ember.computed('xScale', '_xTickFormatFn', function() {
     return d3.svg.axis()
       .orient('bottom')
       .ticks(this.get('xGridTicks'))
       .scale(this.get('xScale'))
-      .tickFormat(this.get('_timeTickFormatFn'));
+      .tickFormat(this.get('_xTickFormatFn'));
   }),
 
   _mainRectHeight: Ember.computed('contextHeight',
