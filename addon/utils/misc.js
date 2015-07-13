@@ -110,6 +110,7 @@ export function sanitizeDataArray(data, getX, getY) {
     });
 
     return Ember.Object.create({
+      type: Ember.get(series, 'type') || 'lineGraph',
       classNames: Ember.get(series, 'classNames'),
       color: Ember.get(series, 'color'),
       disabled: Ember.get(series, 'disabled') ? true : false,

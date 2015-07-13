@@ -3,6 +3,8 @@ import ChartSettings from 'ember-viz/mixins/chart-settings';
 import {createClassNameFunction} from 'ember-viz/utils/misc';
 import Ember from 'ember';
 
+let EVIZ_CHARTS_CLASS = 'ev-charts';
+
 export default BaseComponent.extend(ChartSettings, {
   tagName: 'svg',
   classNames: ['ev-main-svg'],
@@ -104,12 +106,26 @@ export default BaseComponent.extend(ChartSettings, {
   }),
 
   lineType: d3.svg.line,
-  line: Ember.computed('lineType', 'xScale', 'yScale', function() {
-    var xScale = this.get('xScale'),
-        yScale = this.get('yScale');
+  line: Ember.computed('lineType', 'xMap', 'yMap', function() {
+    var xMap = this.get('xMap'),
+        yMap = this.get('yMap');
     return this.get('lineType')()
-      .x(function(d) { return xScale(d.x); })
-      .y(function(d) { return yScale(d.y); });
+      .x(xMap)
+      .y(yMap);
+  }),
+
+  xMap: Ember.computed('xScale', function() {
+    let xScale = this.get('xScale');
+    return function(d) {
+      return xScale(d.x);
+    };
+  }),
+
+  yMap: Ember.computed('yScale', function() {
+    let yScale = this.get('yScale');
+    return function(d) {
+      return yScale(d.y);
+    };
   }),
 
   didInsertElement: function() {
@@ -144,7 +160,7 @@ export default BaseComponent.extend(ChartSettings, {
 
     // Append the main chart lines.
     g.append('g')
-     .attr('class', 'ev-chart-lines')
+     .attr('class', EVIZ_CHARTS_CLASS)
      .attr('clip-path', 'url(#' + this.get('_clipPathId') + ')');
 
     // Append the hover rectangle.
@@ -157,7 +173,7 @@ export default BaseComponent.extend(ChartSettings, {
     this._updateYAxis();
     this._updateMainRect();
     this._updateClipPath();
-    this._updateChartLines();
+    this._updateSeries();
     this._updateHoverRect();
     this._updateTooltipCircle();
   },
@@ -213,13 +229,55 @@ export default BaseComponent.extend(ChartSettings, {
       .attr('height', this.get('_mainRectHeight'));
   }),
 
-  _updateChartLines: Ember.observer('lineFn', 'colorFn', function() {
+  _scatterPlotData: Ember.computed('_data.[]', function() {
+    return this.get('_data').filterBy('type', 'scatterPlot');
+  }),
+
+  _lineGraphData: Ember.computed('_data.[]', function() {
+    return this.get('_data').filterBy('type', 'lineGraph');
+  }),
+
+  _updateSeries: Ember.observer('xMap', 'yMap', function() {
+    this._updateScatterPlots();
+    this._updateLineGraphs();
+  }),
+
+  _updateScatterPlots() {
+    let colorFn = this.get('colorFn'),
+        parent = this.d3(`.${EVIZ_CHARTS_CLASS}`),
+        xMap = this.get('xMap'),
+        yMap = this.get('yMap'),
+        scatterPlotData = this.get('_scatterPlotData');
+
+    let scatterPlots = parent.selectAll('.ev-scatter-plot')
+      .data(scatterPlotData);
+
+    // Add the scatter plots
+    scatterPlots.enter()
+      .append('g')
+      .attr('class', createClassNameFunction('ev-scatter-plot'))
+      .style('fill', colorFn);
+
+    // Add the points for each scatter plot
+    scatterPlots.selectAll('.ev-scatter-point')
+      .data(function(d) { return d.get('values'); })
+      .enter().append('circle')
+      .attr('r', 3.5)
+      .attr('cx', xMap)
+      .attr('cy', yMap)
+
+    // Remove old chart lines.
+    scatterPlots.exit()
+      .remove();
+  },
+
+  _updateLineGraphs: Ember.observer('lineFn', 'colorFn', function() {
     var colorFn = this.get('colorFn'),
-        elements = this.d3('.ev-chart-lines');
+        elements = this.d3(`.${EVIZ_CHARTS_CLASS}`);
 
     // Apply the new data array to the chart lines.
     elements = elements.selectAll('.ev-chart-line')
-      .data(this.get('_data'));
+      .data(this.get('_lineGraphData'));
 
     // Add the new chart lines.
     elements.enter()
