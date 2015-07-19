@@ -264,7 +264,7 @@ export default BaseComponent.extend(ChartSettings, {
       .enter().append('circle')
       .attr('r', 3.5)
       .attr('cx', xMap)
-      .attr('cy', yMap)
+      .attr('cy', yMap);
 
     // Remove old chart lines.
     scatterPlots.exit()

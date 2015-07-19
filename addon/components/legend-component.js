@@ -23,8 +23,7 @@ export default BaseComponent.extend(ChartSettings, {
   }),
 
   updateContent: Ember.observer('data.[]', function() {
-    var self = this,
-        clickTimeoutId,
+    var clickTimeoutId,
         doubleclick,
         legendDiv = this.d3(),
         data = this.get('data'),
@@ -83,7 +82,7 @@ export default BaseComponent.extend(ChartSettings, {
       .append('a');
 
     // Update the item text;
-    legendItems.each(function(d) {
+    legendItems.each(function() {
       d3.select(this).select('a')
         .text(function(d) { return d.get('title'); });
     });
