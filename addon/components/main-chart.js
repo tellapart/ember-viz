@@ -203,7 +203,6 @@ export default BaseComponent.extend(ChartSettings, {
   }),
 
   _handleMouseClick: Ember.computed(function() {
-    // console.log('Handling hover rect click');
     var self = this;
     return function() {
       var clickedPoint,
@@ -219,7 +218,6 @@ export default BaseComponent.extend(ChartSettings, {
     var self = this;
     return function() {
       self.set('selectedPoint', null);
-      console.log('Handling hover rect mouseout');
     };
   }),
 
@@ -299,7 +297,6 @@ export default BaseComponent.extend(ChartSettings, {
   }),
 
   _updateMainRect: Ember.observer('mainMargins.{left,right}', function() {
-    // console.log('_updateMainRect()', arguments[1]);
     var margins = this.get('mainMargins');
     this.d3('.ev-main')
       .attr('transform',
@@ -307,7 +304,6 @@ export default BaseComponent.extend(ChartSettings, {
   }),
 
   _updateGrid: Ember.observer('yGrid', 'xGrid', function() {
-    // console.log('_updateGrid()', arguments[1]);
     this.d3('.main-y-grid')
        .call(this.get('yGrid'));
 
@@ -317,13 +313,11 @@ export default BaseComponent.extend(ChartSettings, {
   }),
 
   _updateYAxis: Ember.observer('yAxis', function() {
-    // console.log('_updateAxes()', arguments[1]);
     this.d3('.main-y-axis')
        .call(this.get('yAxis'));
   }),
 
   _updateXAxis: Ember.observer('xAxis', '_mainRectHeight', function() {
-    // console.log('_updateAxes()', arguments[1]);
 
     this.d3('.main-x-axis')
        .attr('transform', 'translate(0,' + Math.floor(this.get('_mainRectHeight')) + ')')
@@ -349,7 +343,6 @@ export default BaseComponent.extend(ChartSettings, {
   }),
 
   _render: Ember.observer('mainHeight', 'mainWidth', '_data.[]', function() {
-    // console.log('_render()');
     this.d3()
       .attr('width', this.get('mainWidth'))
       .attr('height', this.get('mainHeight'));
