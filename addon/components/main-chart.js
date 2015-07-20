@@ -258,8 +258,10 @@ export default BaseComponent.extend(ChartSettings, {
       .attr('class', createClassNameFunction('ev-scatter-plot'))
       .style('fill', colorFn);
 
+    scatterPlots.selectAll('circle').remove();
+
     // Add the points for each scatter plot
-    scatterPlots.selectAll('.ev-scatter-point')
+    scatterPlots.selectAll('circle')
       .data(function(d) { return d.get('values'); })
       .enter().append('circle')
       .attr('r', 3.5)
