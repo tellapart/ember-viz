@@ -83,7 +83,6 @@ export default Ember.Component.extend({
   },
 
   xDomain: Ember.computed('_dataWithoutPoints.[]', 'showContext', 'brushExtent', 'forceX', function() {
-    // console.log('xDomain()', arguments[1]);
     var domain,
         brushExtent = this.get('brushExtent');
 
@@ -129,7 +128,6 @@ export default Ember.Component.extend({
                           this.get('includeZero'));
   }),
   xScale: Ember.computed('xDomain', '_mainRectWidth', function() {
-    // console.log('xScale()', arguments[1]);
     return d3.time.scale.utc().domain(this.get('xDomain')).range([0, this.get('_mainRectWidth')]);
   }),
   yScale: Ember.computed('yDomain', '_mainRectHeight', function() {

@@ -25,10 +25,8 @@ export default LineChart.extend({
   actions: {
     handleClick: function(clickedPoint) {
       if (Ember.isNone(clickedPoint)) {
-        console.log('Got an empty point');
         return;
       }
-      console.log('Got a point:', clickedPoint.point.x, clickedPoint.point.y);
     }
   }
 });
