@@ -22,11 +22,13 @@
       <hr>
     {{/if}}
     <p>
-      {{ev-format-number _correspondingPoint.point.y formatter=yFormatter
-                                                        format=yFormat}}
-      at&nbsp;
-      {{ev-format-time _correspondingPoint.point.x formatter=xFormatter
-                                                      format=xFormat}}
+      {{ev-format _correspondingPoint.point.y formatter=yFormatter
+                                                 format=yFormat
+                                         inputTransform=yPreformatTransform}}
+      at
+      {{ev-format _correspondingPoint.point.x formatter=xFormatter
+                                                 format=xFormat
+                                         inputTransform=xPreformatTransform}}
     </p>
   {{/ev-tooltip}}
 {{/if}}

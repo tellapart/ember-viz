@@ -43,3 +43,11 @@ export function defaultTimeFormat(data, timeFormatter) {
 }
 
 export var defaultTimeFormatter = d3.time.format.utc;
+
+export function defaultTimeTransform(data) {
+  return new Date(data);
+}
+
+export function defaultValueTransform(data) {
+  return data;
+}

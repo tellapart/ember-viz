@@ -1,5 +1,10 @@
 import Ember from 'ember';
-import {defaultTimeFormat, defaultTimeFormatter} from 'ember-viz/utils/formatters';
+import {
+  defaultTimeFormat,
+  defaultTimeFormatter,
+  defaultTimeTransform,
+  defaultValueTransform
+} from 'ember-viz/utils/formatters';
 
 export default Ember.Mixin.create({
   data: Ember.A([]),
@@ -39,11 +44,13 @@ export default Ember.Mixin.create({
         xFormatter = this.get('xFormatter');
     return defaultTimeFormat(data, xFormatter);
   }),
+  xPreformatTransform: defaultTimeTransform,
   xTickFormat: Ember.computed.alias('xFormat'),
   xFormatter: defaultTimeFormatter,
 
   yFormat: '',
   yFormatter: d3.format,
+  yPreformatTransform: defaultValueTransform,
   yTickFormat: '',
   yTickFormatter: d3.format
 });
