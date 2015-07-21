@@ -24,11 +24,11 @@
     <p>
       {{ev-format _correspondingPoint.point.y formatter=yFormatter
                                                  format=yFormat
-                                         inputTransform=yPreformatTransform}}
+                                         inputTransform=yBeforeFormatTransform}}
       at
       {{ev-format _correspondingPoint.point.x formatter=xFormatter
                                                  format=xFormat
-                                         inputTransform=xPreformatTransform}}
+                                         inputTransform=xBeforeFormatTransform}}
     </p>
   {{/ev-tooltip}}
 {{/if}}

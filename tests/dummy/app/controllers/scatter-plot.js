@@ -4,7 +4,7 @@ import { defaultValueTransform } from 'ember-viz/utils/formatters';
 export default Ember.Controller.extend({
   xFormatter: d3.format,
   xFormat: '',
-  xPreformatTransform: defaultValueTransform,
+  xBeforeFormatTransform: defaultValueTransform,
 
   chartData: Ember.A([
     Ember.Object.create({

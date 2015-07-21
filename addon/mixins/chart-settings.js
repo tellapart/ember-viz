@@ -44,13 +44,13 @@ export default Ember.Mixin.create({
         xFormatter = this.get('xFormatter');
     return defaultTimeFormat(data, xFormatter);
   }),
-  xPreformatTransform: defaultTimeTransform,
+  xBeforeFormatTransform: defaultTimeTransform,
   xTickFormat: Ember.computed.alias('xFormat'),
   xFormatter: defaultTimeFormatter,
 
   yFormat: '',
   yFormatter: d3.format,
-  yPreformatTransform: defaultValueTransform,
+  yBeforeFormatTransform: defaultValueTransform,
   yTickFormat: '',
   yTickFormatter: d3.format
 });
