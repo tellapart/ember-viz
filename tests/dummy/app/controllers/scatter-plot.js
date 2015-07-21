@@ -1,10 +1,8 @@
 import Ember from 'ember';
-import { defaultValueTransform } from 'ember-viz/utils/formatters';
 
 export default Ember.Controller.extend({
-  xFormatter: d3.format,
-  xFormat: '',
-  xBeforeFormatTransform: defaultValueTransform,
+  xTickFormatter: d3.format(),
+  xTooltipFormatter: d3.format(),
 
   chartData: Ember.A([
     Ember.Object.create({

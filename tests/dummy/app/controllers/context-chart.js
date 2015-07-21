@@ -3,7 +3,7 @@ import LineChart from 'dummy/controllers/line-chart';
 
 export default LineChart.extend({
   numCharts: 10,
-  yTickFormat: '.3s',
+  yTickFormatter: d3.format('.3s'),
   chartData: [],
 
   charts: Ember.computed('numCharts', 'chartData.[]', function() {

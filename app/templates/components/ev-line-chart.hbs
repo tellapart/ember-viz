@@ -4,10 +4,8 @@
            mainWidth=mainWidth
        selectedPoint=selectedPoint
          showTooltip=showTooltip
-         yTickFormat=yTickFormat
       yTickFormatter=yTickFormatter
-         xTickFormat=xTickFormat
-          xFormatter=xFormatter
+      xTickFormatter=xTickFormatter
          includeZero=includeZero
               forceX=forceX
               forceY=forceY
@@ -22,13 +20,9 @@
       <hr>
     {{/if}}
     <p>
-      {{ev-format _correspondingPoint.point.y formatter=yFormatter
-                                                 format=yFormat
-                                         inputTransform=yBeforeFormatTransform}}
+      {{ev-format _correspondingPoint.point.y formatter=yTooltipFormatter}}
       at
-      {{ev-format _correspondingPoint.point.x formatter=xFormatter
-                                                 format=xFormat
-                                         inputTransform=xBeforeFormatTransform}}
+      {{ev-format _correspondingPoint.point.x formatter=xTooltipFormatter}}
     </p>
   {{/ev-tooltip}}
 {{/if}}
@@ -36,8 +30,7 @@
   {{ev-context-chart data=_data
             contextHeight=contextHeight
             contextWidth=contextWidth
-             xTickFormat=xTickFormat
-              xFormatter=xFormatter
+          xTickFormatter=xTickFormatter
               brushExtent=brushExtent}}
 {{/if}}
 {{#if showLegend}}

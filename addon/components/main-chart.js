@@ -79,19 +79,19 @@ export default BaseComponent.extend(ChartSettings, {
     return d3.svg.axis().orient('left').ticks(this.get('yGridTicks')).tickFormat('').scale(this.get('yScale'))
       .tickSize(-1 * this.get('_mainRectWidth'), 0, 0);
   }),
-  xAxis: Ember.computed('xScale', '_xTickFormatFn', function() {
+  xAxis: Ember.computed('xScale', 'xTickFormatter', function() {
     return d3.svg.axis()
       .orient('bottom')
       .ticks(this.get('xGridTicks'))
       .scale(this.get('xScale'))
-      .tickFormat(this.get('_xTickFormatFn'));
+      .tickFormat(this.get('xTickFormatter'));
   }),
-  yAxis: Ember.computed('yScale', '_yTickFormatFn', function() {
+  yAxis: Ember.computed('yScale', 'yTickFormatter', function() {
     return d3.svg.axis()
       .orient('left')
       .ticks(this.get('yGridTicks'))
       .scale(this.get('yScale'))
-      .tickFormat(this.get('_yTickFormatFn'));
+      .tickFormat(this.get('yTickFormatter'));
   }),
 
   lineFn: Ember.computed('line', function() {
