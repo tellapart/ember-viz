@@ -21,13 +21,7 @@ export default Ember.Component.extend({
 
     return d3.selectAll('#' + elementId + ' ' + selector);
   },
-  _yTickFormatFn: Ember.computed('yTickFormatter', 'yTickFormat', function() {
-    return this.get('yTickFormatter')(this.get('yTickFormat'));
-  }),
 
-  _xTickFormatFn: Ember.computed('xFormatter', 'xTickFormat', function() {
-    return this.get('xFormatter')(this.get('xTickFormat'));
-  }),
   _dataWithoutPoints: Ember.computed('data.[]', 'data.@each.disabled', function() {
     try {
       return Ember.A(sanitizeDataArray(this.get('data'), this.get('getX'), this.get('getY')));

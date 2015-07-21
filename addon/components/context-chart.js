@@ -94,12 +94,12 @@ export default BaseComponent.extend(ChartSettings, {
   yScale: Ember.computed('yDomain', '_mainRectHeight', function() {
     return d3.scale.linear().domain(this.get('yDomain')).range([this.get('_mainRectHeight'), 0]);
   }),
-  xAxis: Ember.computed('xScale', '_xTickFormatFn', function() {
+  xAxis: Ember.computed('xScale', 'xTickFormatter', function() {
     return d3.svg.axis()
       .orient('bottom')
       .ticks(this.get('xGridTicks'))
       .scale(this.get('xScale'))
-      .tickFormat(this.get('_xTickFormatFn'));
+      .tickFormat(this.get('xTickFormatter'));
   }),
 
   _mainRectHeight: Ember.computed('contextHeight',

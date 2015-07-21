@@ -23,23 +23,23 @@ function _getAverageGranularity(data) {
   return total / count;
 }
 
-export function defaultTimeFormat(data, timeFormatter) {
-  let avgGranularity = _getAverageGranularity(data);
+export function defaultTimeFormatter(data) {
+  let avgGranularity = _getAverageGranularity(data),
+              format = '';
 
   // If the average granularity is around or greater than one point per day,
   // only show month and date.
   if (avgGranularity >= 0.85 * MILLISECONDS_IN_DAY) {
-    return '%m/%d';
-  }
-
+    format = '%m/%d';
   // If the average granularity is less than a minute, show the month, date,
   // hour, minute, and second.
-  if (avgGranularity <= MILLISECONDS_IN_MINUTE) {
-    return '%m/%d %H:%M:%S';
+  } else if (avgGranularity <= MILLISECONDS_IN_MINUTE) {
+    format = '%m/%d %H:%M:%S';
+  } else {
+    format = '%m/%d %H:%M';
   }
 
-  // Otherwise, show month, date, hour, and minute.
-  return timeFormatter('%m/%d %H:%M');
+  return d3.time.format.utc(format);
 }
 
-export var defaultTimeFormatter = d3.time.format.utc;
+export var defaultValueFormatter = d3.format();
