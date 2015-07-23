@@ -21,13 +21,7 @@ export default Ember.Component.extend({
 
     return d3.selectAll('#' + elementId + ' ' + selector);
   },
-  _yTickFormatFn: Ember.computed('yTickFormatter', 'yTickFormat', function() {
-    return this.get('yTickFormatter')(this.get('yTickFormat'));
-  }),
 
-  _xTickFormatFn: Ember.computed('xFormatter', 'xTickFormat', function() {
-    return this.get('xFormatter')(this.get('xTickFormat'));
-  }),
   _dataWithoutPoints: Ember.computed('data.[]', 'data.@each.disabled', function() {
     try {
       return Ember.A(sanitizeDataArray(this.get('data'), this.get('getX'), this.get('getY')));
@@ -83,7 +77,6 @@ export default Ember.Component.extend({
   },
 
   xDomain: Ember.computed('_dataWithoutPoints.[]', 'showContext', 'brushExtent', 'forceX', function() {
-    // console.log('xDomain()', arguments[1]);
     var domain,
         brushExtent = this.get('brushExtent');
 
@@ -129,7 +122,6 @@ export default Ember.Component.extend({
                           this.get('includeZero'));
   }),
   xScale: Ember.computed('xDomain', '_mainRectWidth', function() {
-    // console.log('xScale()', arguments[1]);
     return d3.time.scale.utc().domain(this.get('xDomain')).range([0, this.get('_mainRectWidth')]);
   }),
   yScale: Ember.computed('yDomain', '_mainRectHeight', function() {

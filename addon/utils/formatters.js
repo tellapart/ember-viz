@@ -3,27 +3,6 @@ import Ember from 'ember';
 var MILLISECONDS_IN_MINUTE = 60000;
 var MILLISECONDS_IN_DAY = MILLISECONDS_IN_MINUTE * 60 * 24;
 
-export function defaultTimeFormat(data, timeFormatter) {
-  let avgGranularity = _getAverageGranularity(data);
-
-  // If the average granularity is around or greater than one point per day,
-  // only show month and date.
-  if (avgGranularity >= 0.85 * MILLISECONDS_IN_DAY) {
-    return '%m/%d';
-  }
-
-  // If the average granularity is less than a minute, show the month, date,
-  // hour, minute, and second.
-  if (avgGranularity <= MILLISECONDS_IN_MINUTE) {
-    return '%m/%d %H:%M:%S';
-  }
-
-  // Otherwise, show month, date, hour, and minute.
-  return timeFormatter('%m/%d %H:%M');
-};
-
-export var defaultTimeFormatter = d3.time.format.utc;
-
 function _getAverageGranularity(data) {
   if (Ember.isEmpty(data)) {
     return 0;
@@ -42,4 +21,25 @@ function _getAverageGranularity(data) {
     }
   });
   return total / count;
-};
+}
+
+export function defaultTimeFormatter(data) {
+  let avgGranularity = _getAverageGranularity(data),
+              format = '';
+
+  // If the average granularity is around or greater than one point per day,
+  // only show month and date.
+  if (avgGranularity >= 0.85 * MILLISECONDS_IN_DAY) {
+    format = '%m/%d';
+  // If the average granularity is less than a minute, show the month, date,
+  // hour, minute, and second.
+  } else if (avgGranularity <= MILLISECONDS_IN_MINUTE) {
+    format = '%m/%d %H:%M:%S';
+  } else {
+    format = '%m/%d %H:%M';
+  }
+
+  return d3.time.format.utc(format);
+}
+
+export var defaultValueFormatter = d3.format();

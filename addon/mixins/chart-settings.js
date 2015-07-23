@@ -1,5 +1,8 @@
 import Ember from 'ember';
-import {defaultTimeFormat, defaultTimeFormatter} from 'ember-viz/utils/formatters';
+import {
+  defaultTimeFormatter,
+  defaultValueFormatter
+} from 'ember-viz/utils/formatters';
 
 export default Ember.Mixin.create({
   data: Ember.A([]),
@@ -34,16 +37,17 @@ export default Ember.Mixin.create({
   showContext: false,
   showLegend: false,
 
-  xFormat: Ember.computed('_data.[]', function() {
-    var data = this.get('_data'),
-        xFormatter = this.get('xFormatter');
-    return defaultTimeFormat(data, xFormatter);
+  xTickFormatter: Ember.computed('_data.[]', function() {
+    var data = this.get('_data');
+    return defaultTimeFormatter(data);
   }),
-  xTickFormat: Ember.computed.alias('xFormat'),
-  xFormatter: defaultTimeFormatter,
+  xTooltipFormatter: Ember.computed('_data.[]', function() {
+    var data = this.get('_data');
+    return function(input) {
+      return defaultTimeFormatter(data)(new Date(input));
+    };
+  }),
 
-  yFormat: '',
-  yFormatter: d3.format,
-  yTickFormat: '',
-  yTickFormatter: d3.format
+  yTickFormatter: defaultValueFormatter,
+  yTooltipFormatter: Ember.computed.alias('yTickFormatter')
 });

@@ -79,19 +79,19 @@ export default BaseComponent.extend(ChartSettings, {
     return d3.svg.axis().orient('left').ticks(this.get('yGridTicks')).tickFormat('').scale(this.get('yScale'))
       .tickSize(-1 * this.get('_mainRectWidth'), 0, 0);
   }),
-  xAxis: Ember.computed('xScale', '_xTickFormatFn', function() {
+  xAxis: Ember.computed('xScale', 'xTickFormatter', function() {
     return d3.svg.axis()
       .orient('bottom')
       .ticks(this.get('xGridTicks'))
       .scale(this.get('xScale'))
-      .tickFormat(this.get('_xTickFormatFn'));
+      .tickFormat(this.get('xTickFormatter'));
   }),
-  yAxis: Ember.computed('yScale', '_yTickFormatFn', function() {
+  yAxis: Ember.computed('yScale', 'yTickFormatter', function() {
     return d3.svg.axis()
       .orient('left')
       .ticks(this.get('yGridTicks'))
       .scale(this.get('yScale'))
-      .tickFormat(this.get('_yTickFormatFn'));
+      .tickFormat(this.get('yTickFormatter'));
   }),
 
   lineFn: Ember.computed('line', function() {
@@ -203,7 +203,6 @@ export default BaseComponent.extend(ChartSettings, {
   }),
 
   _handleMouseClick: Ember.computed(function() {
-    // console.log('Handling hover rect click');
     var self = this;
     return function() {
       var clickedPoint,
@@ -219,7 +218,6 @@ export default BaseComponent.extend(ChartSettings, {
     var self = this;
     return function() {
       self.set('selectedPoint', null);
-      console.log('Handling hover rect mouseout');
     };
   }),
 
@@ -258,13 +256,15 @@ export default BaseComponent.extend(ChartSettings, {
       .attr('class', createClassNameFunction('ev-scatter-plot'))
       .style('fill', colorFn);
 
+    scatterPlots.selectAll('circle').remove();
+
     // Add the points for each scatter plot
-    scatterPlots.selectAll('.ev-scatter-point')
+    scatterPlots.selectAll('circle')
       .data(function(d) { return d.get('values'); })
       .enter().append('circle')
       .attr('r', 3.5)
       .attr('cx', xMap)
-      .attr('cy', yMap)
+      .attr('cy', yMap);
 
     // Remove old chart lines.
     scatterPlots.exit()
@@ -299,7 +299,6 @@ export default BaseComponent.extend(ChartSettings, {
   }),
 
   _updateMainRect: Ember.observer('mainMargins.{left,right}', function() {
-    // console.log('_updateMainRect()', arguments[1]);
     var margins = this.get('mainMargins');
     this.d3('.ev-main')
       .attr('transform',
@@ -307,7 +306,6 @@ export default BaseComponent.extend(ChartSettings, {
   }),
 
   _updateGrid: Ember.observer('yGrid', 'xGrid', function() {
-    // console.log('_updateGrid()', arguments[1]);
     this.d3('.main-y-grid')
        .call(this.get('yGrid'));
 
@@ -317,13 +315,11 @@ export default BaseComponent.extend(ChartSettings, {
   }),
 
   _updateYAxis: Ember.observer('yAxis', function() {
-    // console.log('_updateAxes()', arguments[1]);
     this.d3('.main-y-axis')
        .call(this.get('yAxis'));
   }),
 
   _updateXAxis: Ember.observer('xAxis', '_mainRectHeight', function() {
-    // console.log('_updateAxes()', arguments[1]);
 
     this.d3('.main-x-axis')
        .attr('transform', 'translate(0,' + Math.floor(this.get('_mainRectHeight')) + ')')
@@ -349,7 +345,6 @@ export default BaseComponent.extend(ChartSettings, {
   }),
 
   _render: Ember.observer('mainHeight', 'mainWidth', '_data.[]', function() {
-    // console.log('_render()');
     this.d3()
       .attr('width', this.get('mainWidth'))
       .attr('height', this.get('mainHeight'));

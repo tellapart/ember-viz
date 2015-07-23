@@ -100,12 +100,8 @@ export default BaseComponent.extend(ChartSettings, {
       resize(self);
     });
   },
-  willDestroyElement: function() {
-    console.log('Got to willDestroyElement');
-  },
   actions: {
     onClick: function(clickedPoint) {
-      console.log('Got to onClick action in line-chart');
       this.sendAction('onClick', clickedPoint);
     }
   }

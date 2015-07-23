@@ -41,7 +41,6 @@ export default Ember.Controller.extend({
 
   actions: {
     randomizeData: function() {
-      console.log('Randomizing data');
       var chartData = this.createRandomSeries();
       this.setProperties({
         chartData: chartData,
@@ -49,8 +48,6 @@ export default Ember.Controller.extend({
       });
     },
     triggerAction: function() {
-      console.log('Handled it in the controller');
-
       this.get('actionsList').pushObject('"triggerAction" action at ' + new Date());
     }
 

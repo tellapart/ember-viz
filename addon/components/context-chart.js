@@ -82,28 +82,24 @@ export default BaseComponent.extend(ChartSettings, {
 
   xDomain: Ember.computed('_dataWithoutPoints.[]', 'showContext', 'brushExtent',
     'forceX', function() {
-    // console.log('xDomain()', arguments[1]);
     return getDomain(this.get('_dataWithoutPoints'), function(d) { return d.x; });
   }),
   yDomain: Ember.computed('_dataWithoutPoints.[]', '_data.@each.disabled',
     'showContext', 'brushExtent', 'forceY', 'includeZero', function() {
-    // console.log('yDomain()', arguments[1]);
     return getDomain(this.get('_dataWithoutPoints'), function(d) { return d.y; });
   }),
   xScale: Ember.computed('xDomain', '_mainRectWidth', function() {
-    // console.log('xScale()', arguments[1]);
     return d3.time.scale.utc().domain(this.get('xDomain')).range([0, this.get('_mainRectWidth')]);
   }),
   yScale: Ember.computed('yDomain', '_mainRectHeight', function() {
-    // console.log('yScale()', arguments[1]);
     return d3.scale.linear().domain(this.get('yDomain')).range([this.get('_mainRectHeight'), 0]);
   }),
-  xAxis: Ember.computed('xScale', '_xTickFormatFn', function() {
+  xAxis: Ember.computed('xScale', 'xTickFormatter', function() {
     return d3.svg.axis()
       .orient('bottom')
       .ticks(this.get('xGridTicks'))
       .scale(this.get('xScale'))
-      .tickFormat(this.get('_xTickFormatFn'));
+      .tickFormat(this.get('xTickFormatter'));
   }),
 
   _mainRectHeight: Ember.computed('contextHeight',
@@ -191,7 +187,6 @@ export default BaseComponent.extend(ChartSettings, {
 
   _updateBrush: Ember.observer('_mainRectHeight', '_mainRectWidth',
     'contextMargins.top', 'brush', 'xScale', 'yScale', function() {
-    // console.log('context _updateBrush()', arguments[1]);
     this.d3('.ev-brush');
     var gBrush = this.d3('.ev-context-brush'),
         _mainRectHeight = this.get('_mainRectHeight');
@@ -265,7 +260,6 @@ export default BaseComponent.extend(ChartSettings, {
   }),
 
   _updateMainRect: Ember.observer('contextMargins.{left,right}', function() {
-    // console.log('_updateMainRect()', arguments[1]);
     var margins = this.get('contextMargins');
     this.d3('.ev-main')
       .attr('transform',
@@ -278,7 +272,6 @@ export default BaseComponent.extend(ChartSettings, {
        .call(this.get('xAxis'));
   }),
   _render: Ember.observer('contextHeight', 'contextWidth', '_data.[]', function() {
-    // console.log('context chart - _render()');
     this.d3()
       .attr('width', this.get('contextWidth'))
       .attr('height', this.get('contextHeight'));
