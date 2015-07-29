@@ -49,5 +49,5 @@ export default Ember.Mixin.create({
   }),
 
   yTickFormatter: defaultValueFormatter,
-  yTooltipFormatter: Ember.computed.alias('yTickFormatter')
+  yTooltipFormatter: defaultValueFormatter
 });
