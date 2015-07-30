@@ -6,10 +6,6 @@
 }
 .ev-svg {
   display: block;
-
-  /* Only needed to override nvd3 */
-  width: initial;
-  height: initial;
 }
 .ev-line-chart {
   position: relative;
